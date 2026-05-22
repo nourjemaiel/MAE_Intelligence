@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MAE Intelligence</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f4f0;
+  --surface:#ffffff;
+  --card:#ffffff;
+  --card2:#f7faf7;
+  --border:#d4e8d4;
+  --border2:#b8d8b8;
+  --accent:#1a7a3a;
+  --accent-light:#2ea84f;
+  --accent-dim:#e8f5ec;
+  --accent2:#156b32;
+  --accent3:#4cba6a;
+  --danger:#d93025;
+  --warn:#f59e0b;
+  --info:#2563eb;
+  --text:#1a2e1a;
+  --text2:#2d4a2d;
+  --muted:#6b8f6b;
+  --muted2:#8aac8a;
+  --shadow:0 1px 4px rgba(26,122,58,0.08);
+  --shadow2:0 4px 16px rgba(26,122,58,0.12);
+  --r:10px;--r2:14px;
+  font-size:14px;
+}
+html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--accent3)}
+
+/* ─── LAYOUT ─── */
+.shell{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:230px;flex-shrink:0;background:var(--accent2);display:flex;flex-direction:column;overflow:hidden}
+.main{flex:1;overflow-y:auto;background:var(--bg)}
+.page{padding:28px 32px;max-width:1400px}
+
+/* ─── SIDEBAR ─── */
+.sb-logo{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,0.15);
+  display:flex;align-items:center;gap:12px}
+.sb-logo img{width:48px;height:48px;border-radius:50%;object-fit:cover;
+  border:2px solid rgba(255,255,255,0.4);flex-shrink:0}
+.sb-logo-text{}
+.sb-logo-name{font-size:15px;font-weight:700;color:#ffffff;letter-spacing:-.2px}
+.sb-logo-sub{font-size:9px;color:rgba(255,255,255,0.6);letter-spacing:1.5px;
+  text-transform:uppercase;margin-top:2px}
+.sb-nav{flex:1;padding:16px 10px;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.sb-section{font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:1.5px;
+  text-transform:uppercase;padding:12px 10px 6px;margin-top:4px;flex-shrink:0}
+.sb-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);
+  cursor:pointer;transition:.15s;color:rgba(255,255,255,0.7);font-size:13px;font-weight:500;
+  border:none;background:none;width:100%;text-align:left;flex-shrink:0}
+.sb-item:hover{background:rgba(255,255,255,0.1);color:#fff}
+.sb-item.active{background:rgba(255,255,255,0.18);color:#ffffff;
+  border:1px solid rgba(255,255,255,0.25)}
+.sb-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.sb-footer{padding:14px;border-top:1px solid rgba(255,255,255,0.12);flex-shrink:0}
+.sb-status{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,0.6)}
+.pulse{width:7px;height:7px;border-radius:50%;animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+
+/* ─── HISTORY ITEMS IN SIDEBAR ─── */
+.hist-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r);
+  cursor:pointer;transition:.15s;color:rgba(255,255,255,0.6);font-size:11.5px;
+  border:none;background:none;width:100%;text-align:left;flex-shrink:0;
+  border:1px solid transparent;line-height:1.4}
+.hist-item:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);
+  border-color:rgba(255,255,255,0.12)}
+.hist-item.active-hist{background:rgba(255,255,255,0.13);color:#fff;
+  border-color:rgba(255,255,255,0.2)}
+.hist-icon{font-size:13px;flex-shrink:0;opacity:.7}
+.hist-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-del{opacity:0;background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;
+  font-size:12px;padding:2px 4px;border-radius:4px;flex-shrink:0;transition:.15s}
+.hist-item:hover .hist-del{opacity:1}
+.hist-del:hover{color:#f87171;background:rgba(255,100,100,0.15)}
+.hist-date{font-size:9px;color:rgba(255,255,255,0.35);margin-left:auto;flex-shrink:0;
+  font-family:'JetBrains Mono',monospace}
+
+/* ─── NEW CHAT BUTTON ─── */
+.new-chat-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;
+  border-radius:var(--r);cursor:pointer;transition:.15s;
+  color:#fff;font-size:13px;font-weight:600;
+  border:1.5px dashed rgba(255,255,255,0.35);background:rgba(255,255,255,0.06);
+  width:100%;text-align:left;flex-shrink:0;margin-bottom:4px}
+.new-chat-btn:hover{background:rgba(255,255,255,0.14);border-color:rgba(255,255,255,0.6)}
+.new-chat-btn:active{transform:scale(.98)}
+
+/* ─── FILTERS BAR ─── */
+.filters-bar{background:var(--surface);border-bottom:1px solid var(--border);
+  padding:14px 32px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+  box-shadow:var(--shadow)}
+.filter-label{font-size:11px;color:var(--muted);letter-spacing:.5px;font-weight:500}
+.filter-select{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:7px 30px 7px 12px;border-radius:var(--r);font-size:12px;font-family:inherit;
+  cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b8f6b'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+  min-width:140px;transition:.15s;font-weight:500}
+.filter-select:hover{border-color:var(--accent3)}
+.filter-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.filters-reset{background:none;border:1px solid var(--border);color:var(--muted);
+  padding:7px 14px;border-radius:var(--r);cursor:pointer;font-size:12px;
+  font-family:inherit;transition:.15s;font-weight:500}
+.filters-reset:hover{border-color:var(--danger);color:var(--danger);background:#fff5f5}
+
+/* ─── PAGE HEADER ─── */
+.ph{margin-bottom:24px}
+.ph-title{font-size:24px;font-weight:700;color:var(--accent2);letter-spacing:-.3px}
+.ph-sub{font-size:13px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:10px}
+
+/* ─── KPI CARDS ─── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:24px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  padding:18px 20px;position:relative;overflow:hidden;transition:.2s;box-shadow:var(--shadow)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--c1,var(--accent)),var(--c2,var(--accent3)))}
+.kpi:hover{border-color:var(--accent3);transform:translateY(-2px);box-shadow:var(--shadow2)}
+.kpi-icon{font-size:22px;margin-bottom:10px}
+.kpi-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);
+  margin-bottom:4px;font-weight:600}
+.kpi-val{font-size:22px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+.kpi-delta{font-size:11px;color:var(--muted);margin-top:4px}
+.kpi-new{position:absolute;top:10px;right:12px;background:var(--accent-dim);color:var(--accent);
+  font-size:9px;padding:2px 8px;border-radius:20px;font-weight:600;border:1px solid var(--border2);
+  animation:fadeIn .4s ease}
+@keyframes fadeIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+
+/* ─── CHART CARDS ─── */
+.chart-grid{display:grid;gap:16px}
+.chart-grid.cols-2{grid-template-columns:repeat(2,1fr)}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  padding:20px;box-shadow:var(--shadow)}
+.chart-title{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:4px;
+  display:flex;align-items:center;gap:8px}
+.chart-sub{font-size:11px;color:var(--muted);margin-bottom:16px}
+
+/* ─── LIVE FEED ─── */
+.feed-item{display:flex;align-items:center;gap:12px;padding:10px 0;
+  border-bottom:1px solid var(--border);font-size:12px;animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+.feed-dot{width:7px;height:7px;border-radius:50%;background:var(--accent-light);flex-shrink:0}
+.feed-agency{color:var(--accent);font-weight:600;min-width:110px}
+.feed-branch{color:var(--muted)}
+.feed-amount{margin-left:auto;color:var(--accent2);font-family:'JetBrains Mono',monospace;
+  font-size:11px;font-weight:600}
+.feed-time{color:var(--muted2);font-family:'JetBrains Mono',monospace;font-size:10px;
+  min-width:65px;text-align:right}
+
+/* ─── SEGMENTS ─── */
+.seg-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:20px}
+.seg-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  padding:22px;position:relative;overflow:hidden;transition:.2s;box-shadow:var(--shadow)}
+.seg-card:hover{box-shadow:var(--shadow2);border-color:var(--border2)}
+.seg-name{font-size:16px;font-weight:700;margin-bottom:4px}
+.seg-count{font-size:12px;color:var(--muted);margin-bottom:14px}
+.seg-stat{display:flex;justify-content:space-between;align-items:center;
+  margin:6px 0;font-size:12px}
+.seg-stat-k{color:var(--muted)}
+.seg-stat-v{font-weight:600;font-family:'JetBrains Mono',monospace}
+.seg-reco{background:var(--accent-dim);border-radius:var(--r);padding:10px 12px;
+  font-size:11px;color:var(--text2);margin-top:12px;line-height:1.6;
+  border-left:3px solid var(--accent)}
+
+/* ─── FORECAST ─── */
+.model-table{width:100%;border-collapse:collapse;font-size:12px}
+.model-table th{text-align:left;padding:10px 12px;background:var(--bg);color:var(--muted);
+  font-weight:600;letter-spacing:.5px;text-transform:uppercase;font-size:10px;
+  border-bottom:2px solid var(--border)}
+.model-table td{padding:10px 12px;border-bottom:1px solid var(--border)}
+.model-table tr:hover td{background:var(--accent-dim)}
+.badge{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
+.badge-ok  {background:#e8f5ec;color:#1a7a3a;border:1px solid #b8d8b8}
+.badge-warn{background:#fff8e6;color:#b45309;border:1px solid #fcd34d}
+.badge-err {background:#fff0f0;color:#d93025;border:1px solid #fca5a5}
+
+/* ─── AGENT LAYOUT ─── */
+.agent-outer{display:flex;height:calc(100vh - 60px);overflow:hidden}
+
+/* ─── AGENT CHAT AREA ─── */
+.agent-wrap{flex:1;display:grid;grid-template-columns:1fr 290px;gap:16px;
+  padding:28px 24px 0 28px;overflow:hidden;min-width:0}
+.chat-pane{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow)}
+
+/* Chat header with title + new chat btn */
+.chat-header{display:flex;align-items:center;gap:10px;padding:12px 16px;
+  border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
+.chat-header-title{font-size:13px;font-weight:600;color:var(--text2);flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-header-new{display:flex;align-items:center;gap:6px;padding:6px 12px;
+  background:var(--accent);color:#fff;border:none;border-radius:var(--r);
+  cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:.15s;
+  flex-shrink:0}
+.chat-header-new:hover{background:var(--accent-light);transform:translateY(-1px)}
+.chat-header-new:active{transform:scale(.97)}
+
+.chat-msgs{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px}
+.chat-input-row{display:flex;gap:10px;padding:14px 16px;border-top:1px solid var(--border);
+  background:var(--bg);flex-shrink:0}
+.chat-input{flex:1;background:var(--surface);border:1.5px solid var(--border);color:var(--text);
+  padding:10px 14px;border-radius:var(--r);font-size:13px;font-family:inherit;transition:.15s}
+.chat-input:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-dim)}
+.chat-send{background:var(--accent);color:#fff;border:none;padding:10px 20px;
+  border-radius:var(--r);cursor:pointer;font-weight:600;font-size:13px;font-family:inherit;
+  transition:.15s;white-space:nowrap;flex-shrink:0}
+.chat-send:hover{background:var(--accent-light)}
+.chat-send:disabled{opacity:.4;cursor:not-allowed}
+
+/* Messages */
+.msg-user{align-self:flex-end;background:var(--accent);color:#fff;
+  padding:10px 14px;border-radius:16px 16px 3px 16px;max-width:75%;font-size:13px;line-height:1.6}
+.msg-ai{align-self:flex-start;background:var(--surface);border:1px solid var(--border);
+  padding:12px 14px;border-radius:3px 16px 16px 16px;max-width:85%;font-size:13px;
+  line-height:1.75;box-shadow:var(--shadow)}
+.msg-tools{align-self:flex-start;display:flex;gap:6px;flex-wrap:wrap;padding:2px 0}
+.tool-badge{background:var(--accent-dim);color:var(--accent);border:1px solid var(--border2);
+  border-radius:20px;font-size:10px;padding:3px 10px;
+  font-family:'JetBrains Mono',monospace;font-weight:500}
+.msg-loading{align-self:flex-start;color:var(--muted);font-size:13px;
+  display:flex;align-items:center;gap:8px}
+.dots span{display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:var(--accent);animation:dotBounce 1.2s infinite}
+.dots span:nth-child(2){animation-delay:.2s}
+.dots span:nth-child(3){animation-delay:.4s}
+@keyframes dotBounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+
+/* msg-error style */
+.msg-error{align-self:flex-start;background:#fff8f0;border:1px solid #fcd34d;
+  padding:12px 14px;border-radius:3px 16px 16px 16px;max-width:85%;font-size:13px;
+  line-height:1.75;color:#92400e}
+
+/* Agent side panel */
+.agent-side{display:flex;flex-direction:column;gap:12px;overflow-y:auto;
+  padding-bottom:28px}
+.side-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  padding:16px;box-shadow:var(--shadow);flex-shrink:0}
+.side-title{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);
+  margin-bottom:12px;font-weight:600}
+.suggest-btn{width:100%;text-align:left;background:var(--bg);border:1px solid var(--border);
+  color:var(--text2);padding:9px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;
+  font-family:inherit;margin-bottom:6px;transition:.15s;line-height:1.4;font-weight:500}
+.suggest-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+.tool-item{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);padding:5px 0;
+  border-bottom:1px solid var(--border)}
+.tool-item:last-child{border-bottom:none}
+.tool-dot{width:6px;height:6px;border-radius:50%;background:var(--accent-light);flex-shrink:0}
+
+/* ─── MISC ─── */
+.section-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:1px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:40px}
+.update-tag{display:inline-flex;align-items:center;gap:5px;background:var(--accent-dim);
+  color:var(--accent);font-size:10px;padding:3px 10px;border-radius:20px;
+  border:1px solid var(--border2);font-weight:600}
+
+/* ─── EMPTY HISTORY STATE ─── */
+.hist-empty{padding:8px 10px;font-size:11px;color:rgba(255,255,255,0.3);
+  font-style:italic;text-align:center}
+
+/* ─── CONFIRM DIALOG ─── */
+.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;
+  display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease}
+.confirm-box{background:var(--surface);border-radius:var(--r2);padding:24px;width:340px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.2);border:1px solid var(--border)}
+.confirm-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px}
+.confirm-body{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+.confirm-actions{display:flex;gap:10px;justify-content:flex-end}
+.confirm-cancel{padding:8px 16px;border:1px solid var(--border);background:none;
+  color:var(--muted);border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:12px}
+.confirm-cancel:hover{border-color:var(--border2);color:var(--text)}
+.confirm-ok{padding:8px 16px;border:none;background:var(--danger);
+  color:#fff;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:12px;font-weight:600}
+.confirm-ok:hover{background:#b91c1c}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const API = "http://localhost:8000/api";
+
+const {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, AreaChart, Area, ComposedChart
+} = Recharts;
+
+const CHART_COLORS = ["#1a7a3a","#2ea84f","#4cba6a","#80d498","#b8e8c8","#f59e0b","#d93025","#2563eb"];
+
+const TT = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{background:"#fff",border:"1px solid #d4e8d4",borderRadius:8,
+      padding:"10px 14px",fontSize:12,boxShadow:"0 4px 12px rgba(26,122,58,0.12)"}}>
+      <p style={{color:"#6b8f6b",marginBottom:6,fontWeight:600}}>{label}</p>
+      {payload.map((p,i) => (
+        <p key={i} style={{color:p.color||"#1a7a3a",margin:"2px 0"}}>
+          {p.name}: <strong>{typeof p.value==="number"?p.value.toLocaleString("fr-TN"):p.value}</strong>
+        </p>
+      ))}
+    </div>
+  );
+};
+
+const fmtM   = v => v>=1e6?(v/1e6).toFixed(2)+"M":v>=1e3?(v/1e3).toFixed(1)+"K":Math.round(v).toLocaleString();
+const fmtTND = v => fmtM(v)+" TND";
+
+// ─── Generate conversation title from first user message ───────
+function genTitle(firstMsg) {
+  if (!firstMsg) return "Nouvelle conversation";
+  const cleaned = firstMsg.trim();
+  if (cleaned.length <= 42) return cleaned;
+  return cleaned.slice(0, 40).trim() + "…";
+}
+
+// ─── Format date for history ────────────────────────────────────
+function fmtHistDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffH = diffMs / 3600000;
+  if (diffH < 1) return "À l'instant";
+  if (diffH < 24) return `Il y a ${Math.round(diffH)}h`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD === 1) return "Hier";
+  if (diffD < 7) return `Il y a ${diffD}j`;
+  return d.toLocaleDateString("fr-FR", {day:"2-digit", month:"short"});
+}
+
+// ─── FILTERS ───────────────────────────────────────────────────
+function Filters({ filters, values, onChange, onReset }) {
+  return (
+    <div className="filters-bar">
+      <span className="filter-label">Filtres :</span>
+      {[
+        {key:"agence", label:"Agence",  opts:filters.agences||[]},
+        {key:"region", label:"Région",  opts:filters.regions||[]},
+        {key:"branche",label:"Branche", opts:filters.branches||[]},
+      ].map(f=>(
+        <select key={f.key} className="filter-select" value={values[f.key]}
+          onChange={e=>onChange(f.key,e.target.value)}>
+          <option value="all">Toutes {f.label}s</option>
+          {f.opts.filter(o=>o!=="all").map(o=><option key={o} value={o}>{o}</option>)}
+        </select>
+      ))}
+      <select className="filter-select" value={values.mois} onChange={e=>onChange("mois",+e.target.value)}>
+        <option value={0}>Tous les mois</option>
+        {["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"]
+          .map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+      </select>
+      <button className="filters-reset" onClick={onReset}>✕ Réinitialiser</button>
+    </div>
+  );
+}
+
+// ─── LIVE FEED ─────────────────────────────────────────────────
+function LiveFeed({ feed }) {
+  const fmtTime = ts => {
+    try{const d=new Date(ts);return d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
+    catch{return "";}
+  };
+  return (
+    <div>
+      {feed.length===0&&<div className="empty">En attente de données...</div>}
+      {feed.map((r,i)=>(
+        <div key={i} className="feed-item">
+          <div className="feed-dot"/>
+          <span className="feed-agency">{r.AGENCE||"—"}</span>
+          <span className="feed-branch">{r.BRANCHE||"—"}</span>
+          <span style={{color:"var(--muted)",fontSize:11}}>{r.SEXE||""} · {r.AGE||""}ans</span>
+          <span className="feed-amount">{fmtTND(r.PRIME_NETTE||0)}</span>
+          <span className="feed-time">{fmtTime(r.timestamp)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════
+function Dashboard({ filterVals }) {
+  const [kpis,setKpis]=useState(null);
+  const [agData,setAg]=useState([]);
+  const [brData,setBr]=useState([]);
+  const [mData,setMo]=useState([]);
+  const [pData,setPr]=useState({});
+  const [feed,setFeed]=useState([]);
+  const [prevCount,setPrev]=useState(0);
+  const [isNew,setIsNew]=useState(false);
+
+  const qs=new URLSearchParams({
+    agence:filterVals.agence,region:filterVals.region,
+    branche:filterVals.branche,mois:filterVals.mois
+  }).toString();
+
+  const fetchAll=useCallback(async()=>{
+    try{
+      const[k,a,b,m,p,f]=await Promise.all([
+        fetch(`${API}/kpis?${qs}`).then(r=>r.json()),
+        fetch(`${API}/ca-by-agence?${qs}`).then(r=>r.json()),
+        fetch(`${API}/ca-by-branche?${qs}`).then(r=>r.json()),
+        fetch(`${API}/ca-by-month?${qs}`).then(r=>r.json()),
+        fetch(`${API}/profil-clients?${qs}`).then(r=>r.json()),
+        fetch(`${API}/live-feed?limit=8`).then(r=>r.json()),
+      ]);
+      if(k.total_generated>prevCount){setIsNew(true);setTimeout(()=>setIsNew(false),2500);}
+      setPrev(k.total_generated||0);
+      setKpis(k);setAg(a.slice(0,10));setBr(b);setMo(m);setPr(p);setFeed(f);
+    }catch(e){console.error(e);}
+  },[qs]);
+
+  useEffect(()=>{fetchAll();const t=setInterval(fetchAll,5000);return()=>clearInterval(t);},[fetchAll]);
+
+  const kpiList=kpis?[
+    {label:"Chiffre d'Affaires",val:fmtTND(kpis.ca_total),delta:"+4.7% vs 2024",icon:"💰",c1:"#1a7a3a",c2:"#4cba6a"},
+    {label:"Clients Actifs",val:(kpis.nb_clients||0).toLocaleString(),delta:`${kpis.nb_contrats||0} contrats`,icon:"👥",c1:"#2563eb",c2:"#60a5fa"},
+    {label:"Sinistres",val:fmtTND(kpis.sin_total),delta:`Ratio: ${(kpis.ratio_sin||0).toFixed(1)}%`,icon:"🚗",c1:"#d93025",c2:"#f59e0b"},
+    {label:"Top Agence",val:String(kpis.top_agence||"—").split(" ").slice(0,2).join(" "),delta:fmtTND(kpis.top_agence_ca||0),icon:"🏆",c1:"#f59e0b",c2:"#1a7a3a"},
+    {label:"Générés (live)",val:(kpis.total_generated||0).toLocaleString(),delta:"Toutes les 5s",icon:"⚡",c1:"#2ea84f",c2:"#4cba6a"},
+  ]:[];
+
+  const ageData=Object.entries(pData.age_bins||{}).map(([n,v])=>({name:n,value:v}));
+  const cspData=Object.entries(pData.csp||{}).slice(0,5).map(([n,v])=>({name:n,value:v}));
+
+  return (
+    <div className="page">
+      <div className="ph">
+        <div className="ph-title">Tableau de Bord</div>
+        <div className="ph-sub">
+          Vue d'ensemble du portefeuille MAE — Exercice 2025
+          {isNew&&<span className="update-tag">⚡ Nouveau contrat</span>}
+        </div>
+      </div>
+      <div className="kpi-grid">
+        {kpiList.map((k,i)=>(
+          <div key={i} className="kpi" style={{"--c1":k.c1,"--c2":k.c2}}>
+            <div className="kpi-icon">{k.icon}</div>
+            <div className="kpi-label">{k.label}</div>
+            <div className="kpi-val">{k.val}</div>
+            <div className="kpi-delta">{k.delta}</div>
+            {i===4&&isNew&&<div className="kpi-new">+1 LIVE</div>}
+          </div>
+        ))}
+      </div>
+      <div className="chart-grid cols-2" style={{marginBottom:16}}>
+        <div className="chart-card">
+          <div className="chart-title">🏢 Top 10 Agences par CA</div>
+          <div className="chart-sub">Chiffre d'affaires en TND</div>
+          <div style={{height:300}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={agData} layout="vertical" margin={{left:10,right:40,top:0,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4" horizontal={false}/>
+                <XAxis type="number" tick={{fill:"#6b8f6b",fontSize:10}} tickFormatter={v=>fmtM(v)} axisLine={false} tickLine={false}/>
+                <YAxis type="category" dataKey="agence" tick={{fill:"#2d4a2d",fontSize:11}} width={95} axisLine={false} tickLine={false}/>
+                <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
+                <Bar dataKey="ca" name="CA" radius={[0,5,5,0]}>
+                  {agData.map((_,i)=><Cell key={i} fill={CHART_COLORS[Math.min(i,1)]} fillOpacity={1-i*0.05}/>)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="chart-card">
+          <div className="chart-title">🗂 Répartition par Branche</div>
+          <div className="chart-sub">Part du chiffre d'affaires</div>
+          <div style={{height:300}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={brData} dataKey="ca" nameKey="branche" cx="50%" cy="50%"
+                  innerRadius={65} outerRadius={105} paddingAngle={3}
+                  label={({branche,part})=>`${branche} ${part}%`} labelLine={{stroke:"#d4e8d4"}}>
+                  {brData.map((_,i)=><Cell key={i} fill={CHART_COLORS[i%CHART_COLORS.length]}/>)}
+                </Pie>
+                <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+      <div className="chart-grid cols-2" style={{marginBottom:16}}>
+        <div className="chart-card">
+          <div className="chart-title">📈 Évolution Mensuelle 2025</div>
+          <div className="chart-sub">Primes collectées vs sinistres réglés</div>
+          <div style={{height:260}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={mData} margin={{left:0,right:10,top:0,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4"/>
+                <XAxis dataKey="mois" tick={{fill:"#6b8f6b",fontSize:10}} axisLine={false} tickLine={false}/>
+                <YAxis tick={{fill:"#6b8f6b",fontSize:10}} tickFormatter={v=>fmtM(v)} axisLine={false} tickLine={false}/>
+                <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
+                <Legend wrapperStyle={{fontSize:11,color:"#6b8f6b"}}/>
+                <Area type="monotone" dataKey="primes" name="Primes" fill="#e8f5ec" stroke="#1a7a3a" strokeWidth={2.5}/>
+                <Bar dataKey="sinistres" name="Sinistres" fill="#d93025" opacity={0.75} radius={[3,3,0,0]}/>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="chart-card">
+          <div className="chart-title">👤 Profil Clients</div>
+          <div className="chart-sub">Répartition par tranche d'âge et CSP</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,height:260}}>
+            <div>
+              <div style={{fontSize:11,color:"var(--muted)",marginBottom:8,fontWeight:600}}>Âge</div>
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart data={ageData} margin={{left:0,right:0,top:0,bottom:0}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4" vertical={false}/>
+                  <XAxis dataKey="name" tick={{fill:"#6b8f6b",fontSize:9}} axisLine={false} tickLine={false}/>
+                  <YAxis hide/>
+                  <Tooltip content={<TT/>}/>
+                  <Bar dataKey="value" name="Clients" fill="#2ea84f" radius={[4,4,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:"var(--muted)",marginBottom:8,fontWeight:600}}>CSP</div>
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart data={cspData} layout="vertical" margin={{left:0,right:0,top:0,bottom:0}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4" horizontal={false}/>
+                  <XAxis type="number" hide/>
+                  <YAxis type="category" dataKey="name" tick={{fill:"#2d4a2d",fontSize:9}} width={80} axisLine={false} tickLine={false}/>
+                  <Tooltip content={<TT/>}/>
+                  <Bar dataKey="value" name="Clients" fill="#1a7a3a" radius={[0,4,4,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="chart-card">
+        <div className="chart-title">
+          ⚡ Flux en temps réel
+          <span className="update-tag" style={{marginLeft:"auto"}}>Auto-refresh 5s</span>
+        </div>
+        <div className="chart-sub">Derniers contrats enregistrés dans le système</div>
+        <LiveFeed feed={feed}/>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORECAST
+// ═══════════════════════════════════════════════════════════════
+function Forecast() {
+  const [data,setData]=useState([]);
+  useEffect(()=>{fetch(`${API}/forecast`).then(r=>r.json()).then(setData).catch(()=>{});},[]);
+  const totalPrev=data.reduce((s,r)=>s+r.ca_prev,0);
+  const maxMois=data.reduce((b,r)=>r.ca_prev>b.ca_prev?r:b,{ca_prev:0}).mois||"—";
+  const minMois=data.reduce((b,r)=>r.ca_prev<b.ca_prev?r:b,{ca_prev:Infinity}).mois||"—";
+  const MODELS=[
+    {name:"🥇 Régression Linéaire",mae:"49.79M",rmse:"69.55M",r2:"0.533",status:"ok",verdict:"Retenu"},
+    {name:"🥈 Prophet",mae:"60.27M",rmse:"75.72M",r2:"0.446",status:"warn",verdict:"Acceptable"},
+    {name:"🥉 SARIMA",mae:"353.09M",rmse:"531.25M",r2:"-26.26",status:"err",verdict:"Éliminé"},
+  ];
+  return (
+    <div className="page">
+      <div className="ph">
+        <div className="ph-title">Prévisions 2026</div>
+        <div className="ph-sub">Régression Linéaire Saisonnière · Taux de croissance +4.7%</div>
+      </div>
+      <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
+        {[
+          {label:"CA Total Prévu 2026",val:fmtTND(totalPrev),delta:"vs 2025: +4.7%",icon:"📈"},
+          {label:"Mois le + fort",val:maxMois,delta:"Pic saisonnier",icon:"🚀"},
+          {label:"Mois le + faible",val:minMois,delta:"Creux saisonnier",icon:"📉"},
+          {label:"R² du Modèle",val:"0.533",delta:"Meilleur des 3",icon:"🎯"},
+        ].map((k,i)=>(
+          <div key={i} className="kpi">
+            <div className="kpi-icon">{k.icon}</div>
+            <div className="kpi-label">{k.label}</div>
+            <div className="kpi-val" style={{fontSize:20}}>{k.val}</div>
+            <div className="kpi-delta">{k.delta}</div>
+          </div>
+        ))}
+      </div>
+      <div className="chart-card" style={{marginBottom:16}}>
+        <div className="chart-title">📊 Prévision CA mensuelle — Intervalle de Confiance 95%</div>
+        <div className="chart-sub">Régression Linéaire Saisonnière — données réelles 2025 vs prévisions 2026</div>
+        <div style={{height:360}}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{left:10,right:20,top:10,bottom:0}}>
+              <defs>
+                <linearGradient id="gradCI" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#1a7a3a" stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor="#1a7a3a" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4"/>
+              <XAxis dataKey="mois" tick={{fill:"#6b8f6b",fontSize:11}} axisLine={false} tickLine={false}/>
+              <YAxis tick={{fill:"#6b8f6b",fontSize:11}} tickFormatter={v=>fmtM(v)} axisLine={false} tickLine={false}/>
+              <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
+              <Legend wrapperStyle={{fontSize:11,color:"#6b8f6b"}}/>
+              <Area dataKey="ci_high" name="CI Haut" stroke="none" fill="url(#gradCI)" legendType="none"/>
+              <Area dataKey="ci_low"  name="CI Bas"  stroke="none" fill="#f0f4f0"      legendType="none"/>
+              <Line type="monotone" dataKey="ca_prev" name="CA Prévu 2026" stroke="#1a7a3a" strokeWidth={2.5}
+                dot={{r:4,fill:"#1a7a3a",strokeWidth:2,stroke:"#fff"}} activeDot={{r:6}}/>
+              <Line type="monotone" dataKey="ca_reel" name="CA Réel 2025" stroke="#8aac8a" strokeWidth={2}
+                strokeDasharray="5 3" dot={{r:3,fill:"#8aac8a"}}/>
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <div className="chart-grid cols-2">
+        <div className="chart-card">
+          <div className="chart-title">📋 Tableau des Prévisions Mensuelles</div>
+          <div className="chart-sub">Valeurs avec intervalles de confiance</div>
+          <table className="model-table">
+            <thead><tr><th>Mois</th><th>CA Prévu</th><th>Borne Inf.</th><th>Borne Sup.</th></tr></thead>
+            <tbody>
+              {data.map((r,i)=>(
+                <tr key={i}>
+                  <td style={{color:"var(--accent2)",fontWeight:600}}>{r.mois}</td>
+                  <td style={{fontFamily:"'JetBrains Mono',monospace",color:"var(--accent)",fontWeight:600}}>{fmtTND(r.ca_prev)}</td>
+                  <td style={{fontFamily:"'JetBrains Mono',monospace",color:"var(--muted)"}}>{fmtTND(r.ci_low)}</td>
+                  <td style={{fontFamily:"'JetBrains Mono',monospace",color:"var(--muted)"}}>{fmtTND(r.ci_high)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="chart-card">
+          <div className="chart-title">🔬 Comparaison des Modèles</div>
+          <div className="chart-sub">Performance sur données 2025</div>
+          <table className="model-table">
+            <thead><tr><th>Modèle</th><th>MAE</th><th>RMSE</th><th>R²</th><th>Verdict</th></tr></thead>
+            <tbody>
+              {MODELS.map((m,i)=>(
+                <tr key={i}>
+                  <td style={{fontWeight:600}}>{m.name}</td>
+                  <td style={{fontFamily:"'JetBrains Mono',monospace"}}>{m.mae}</td>
+                  <td style={{fontFamily:"'JetBrains Mono',monospace"}}>{m.rmse}</td>
+                  <td style={{fontFamily:"'JetBrains Mono',monospace"}}>{m.r2}</td>
+                  <td><span className={`badge badge-${m.status}`}>{m.verdict}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{background:"var(--accent-dim)",borderRadius:"var(--r)",padding:14,
+            marginTop:16,fontSize:12,color:"var(--text2)",lineHeight:1.75,
+            borderLeft:"3px solid var(--accent)"}}>
+            💡 <strong>Pourquoi la Régression Linéaire ?</strong><br/>
+            Avec 12 points mensuels, les modèles complexes (SARIMA) sur-ajustent.
+            La régression saisonnière capture la tendance +4.7% et les patterns mensuels
+            avec le meilleur R² = 0.533.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SEGMENTATION
+// ═══════════════════════════════════════════════════════════════
+function Segmentation() {
+  const [segs,setSegs]=useState([]);
+  useEffect(()=>{fetch(`${API}/segments`).then(r=>r.json()).then(setSegs).catch(()=>{});},[]);
+  const total=segs.reduce((s,r)=>s+r.count,0)||72674;
+  const RECOS={
+    "Premium":   "Programme VIP, manager dédié, offres multi-contrats exclusives.",
+    "Standard":  "Upselling garanties complètes, incentives réduction bonus-malus.",
+    "Occasionnel":"Campagne fidélisation, offres packagées, digitalisation parcours.",
+    "A Risque":  "Révision tarifaire ciblée, politique souscription stricte, prévention.",
+  };
+  const pieData=segs.map(s=>({name:s.segment,value:s.count}));
+  return (
+    <div className="page">
+      <div className="ph">
+        <div className="ph-title">Segmentation Clients</div>
+        <div className="ph-sub">K-Means Clustering avec PCA — 4 segments sur 72 674 clients</div>
+      </div>
+      <div className="chart-grid cols-2" style={{marginBottom:16}}>
+        <div className="chart-card">
+          <div className="chart-title">🥧 Répartition du Portefeuille</div>
+          <div style={{height:300}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                  innerRadius={70} outerRadius={110} paddingAngle={4}
+                  label={({name,value})=>`${name}: ${((value/total)*100).toFixed(1)}%`}>
+                  {segs.map((s,i)=><Cell key={i} fill={s.color}/>)}
+                </Pie>
+                <Tooltip content={<TT/>} formatter={v=>v.toLocaleString()+" clients"}/>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="chart-card">
+          <div className="chart-title">💰 CA Moyen par Segment</div>
+          <div style={{height:300}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={segs} margin={{left:0,right:20,top:10,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4" vertical={false}/>
+                <XAxis dataKey="segment" tick={{fill:"#2d4a2d",fontSize:11}} axisLine={false} tickLine={false}/>
+                <YAxis tick={{fill:"#6b8f6b",fontSize:10}} tickFormatter={v=>fmtM(v)} axisLine={false} tickLine={false}/>
+                <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
+                <Bar dataKey="ca_moyen" name="CA Moyen" radius={[6,6,0,0]}>
+                  {segs.map((s,i)=><Cell key={i} fill={s.color}/>)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+      <div className="section-title">Profils & Recommandations Stratégiques</div>
+      <div className="seg-grid">
+        {segs.map((s,i)=>(
+          <div key={i} className="seg-card">
+            <div style={{position:"absolute",top:0,left:0,bottom:0,width:4,
+              background:s.color,borderRadius:"14px 0 0 14px"}}/>
+            <div style={{display:"flex",justifyContent:"space-between",
+              alignItems:"flex-start",marginBottom:4,paddingLeft:8}}>
+              <div className="seg-name" style={{color:s.color}}>{s.segment}</div>
+              <span style={{background:s.color+"20",color:s.color,fontSize:10,
+                padding:"3px 10px",borderRadius:20,border:`1px solid ${s.color}40`,fontWeight:600}}>
+                {((s.count/total)*100).toFixed(1)}%
+              </span>
+            </div>
+            <div className="seg-count" style={{paddingLeft:8}}>
+              {s.count.toLocaleString()} clients · Risque:{" "}
+              <strong style={{color:
+                s.risque==="Eleve"||s.risque==="Élevé"?"var(--danger)":
+                s.risque==="Modere"||s.risque==="Modéré"?"var(--warn)":"var(--accent)"}}>
+                {s.risque}
+              </strong>
+            </div>
+            {[["CA Moyen",fmtTND(s.ca_moyen)],
+              ["Bonus-Malus moy.",s.bm_moyen?.toFixed(1)||"—"],
+              ["Contrats/client",s.nb_contrats_moyen?.toFixed(1)||"—"]
+            ].map(([k,v])=>(
+              <div key={k} className="seg-stat" style={{paddingLeft:8}}>
+                <span className="seg-stat-k">{k}</span>
+                <span className="seg-stat-v" style={{color:s.color}}>{v}</span>
+              </div>
+            ))}
+            <div className="seg-reco" style={{marginLeft:8}}>
+              💡 {RECOS[s.segment]||"—"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AGENT IA  —  receives state from App (persistent across nav)
+// ═══════════════════════════════════════════════════════════════
+function Agent({ conversations, activeConvId, onNewChat, onSelectConv, onDeleteConv, onUpdateConv }) {
+  // Get active conversation
+  const activeConv = conversations.find(c => c.id === activeConvId) || null;
+  const msgs        = activeConv ? activeConv.msgs       : [];
+  const apiHistory  = activeConv ? activeConv.apiHistory : [];
+
+  const [input,setInput]  = useState("");
+  const [loading,setLoading] = useState(false);
+  const [confirmDel,setConfirmDel] = useState(null); // conv id to confirm delete
+  const bottomRef = useRef(null);
+
+  const SUGGESTIONS=[
+    "Résume le portefeuille MAE en temps réel",
+    "Quel est le CA prévu pour juin 2026 ?",
+    "Analyse les risques du portefeuille",
+    "Compare les performances des agences",
+    "Quels clients sont à risque ?",
+    "Recommandations stratégiques prioritaires",
+  ];
+  const TOOLS_LIST=["portfolio_summary","top_agencies","forecast","segments",
+    "risk_analysis","sinistres_stats","branch_analysis","compare_agencies",
+    "detect_anomalies","profil_clients"];
+
+  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[msgs]);
+
+  const send = async (text) => {
+    if (!text.trim() || loading) return;
+
+    // If no active conversation, create one first
+    let convId = activeConvId;
+    if (!convId) {
+      convId = onNewChat(text); // pass first message to auto-title
+    }
+
+    const userMsgObj = {role:"user", content:text};
+    const updatedMsgs = [...msgs, {type:"user", text}];
+    onUpdateConv(convId, updatedMsgs, apiHistory);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API}/agent`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({message:text, history:apiHistory}),
+      });
+      const data = await res.json();
+
+      // Friendly rate limit message
+      let answer = data.answer || "";
+      const isRateLimit = answer.includes("Rate limit reached") || answer.includes("rate_limit_exceeded") || answer.includes("429");
+      if (isRateLimit) {
+        answer = "⏳ **Limite de requêtes atteinte** (Groq free tier).\n\nVeuillez patienter quelques secondes avant de réessayer.\n\n💡 *Conseil :* Passez au Dev Tier sur console.groq.com pour des limites plus élevées.";
+      }
+
+      const newApiHistory = [...apiHistory, userMsgObj, {role:"assistant", content:answer}];
+      const addMsgs = [];
+      if (data.tool_calls?.length > 0) {
+        const toolNames = [...new Set(data.tool_calls.map(tc => tc.tool))];
+        addMsgs.push({type:"tools_used", tools:toolNames});
+      }
+      addMsgs.push({type: isRateLimit ? "error" : "ai", text:answer});
+      onUpdateConv(convId, [...updatedMsgs, ...addMsgs], newApiHistory);
+    } catch(e) {
+      onUpdateConv(convId,
+        [...updatedMsgs, {type:"error", text:"⚠️ Erreur de connexion. Vérifiez que FastAPI tourne sur le port 8000."}],
+        apiHistory
+      );
+    }
+    setLoading(false);
+  };
+
+  const handleKey = e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); send(input); } };
+
+  const handleNewChat = () => {
+    onNewChat(null); // null = no first message, just create empty conv
+  };
+
+  const handleDeleteConv = (e, convId) => {
+    e.stopPropagation();
+    setConfirmDel(convId);
+  };
+
+  const confirmDelete = () => {
+    if (confirmDel) { onDeleteConv(confirmDel); }
+    setConfirmDel(null);
+  };
+
+  const convToDelete = conversations.find(c => c.id === confirmDel);
+
+  return (
+    <div className="agent-outer">
+      {/* ── Confirm delete dialog ── */}
+      {confirmDel && (
+        <div className="confirm-overlay" onClick={()=>setConfirmDel(null)}>
+          <div className="confirm-box" onClick={e=>e.stopPropagation()}>
+            <div className="confirm-title">Supprimer la conversation ?</div>
+            <div className="confirm-body">
+              « {convToDelete?.title || "Cette conversation"} » sera supprimée définitivement.
+            </div>
+            <div className="confirm-actions">
+              <button className="confirm-cancel" onClick={()=>setConfirmDel(null)}>Annuler</button>
+              <button className="confirm-ok" onClick={confirmDelete}>Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Chat + side panel ── */}
+      <div className="agent-wrap">
+        {/* Chat pane */}
+        <div className="chat-pane">
+          {/* Header with current conv title + new chat button */}
+          <div className="chat-header">
+            <span className="chat-header-title">
+              {activeConv ? activeConv.title : "Nouvelle conversation"}
+            </span>
+            <button className="chat-header-new" onClick={handleNewChat}>
+              ✦ Nouvelle conversation
+            </button>
+          </div>
+
+          <div className="chat-msgs">
+            {msgs.length === 0 && (
+              <div style={{textAlign:"center",padding:"60px 20px",color:"var(--muted)"}}>
+                <img src="mae_logo.png" alt="MAE" style={{width:80,height:80,borderRadius:"50%",
+                  marginBottom:16,border:"3px solid var(--border2)"}}
+                  onError={e=>{e.target.style.display="none"}}/>
+                <div style={{fontSize:18,color:"var(--accent2)",fontWeight:700,marginBottom:8}}>
+                  Bonjour, je suis MAEIA
+                </div>
+                <div style={{fontSize:13,lineHeight:1.8,color:"var(--muted)"}}>
+                  Votre assistant IA pour analyser le portefeuille MAE.<br/>
+                  Je consulte les données en temps réel avant de vous répondre.
+                </div>
+              </div>
+            )}
+            {msgs.map((m,i) => {
+              if (m.type==="user") return (
+                <div key={i} className="msg-user">{m.text}</div>
+              );
+              if (m.type==="tools_used") return (
+                <div key={i} className="msg-tools">
+                  {m.tools.map(t=>(
+                    <span key={t} className="tool-badge">⚙ {t}</span>
+                  ))}
+                </div>
+              );
+              if (m.type==="error") return (
+                <div key={i} className="msg-error"
+                  dangerouslySetInnerHTML={{__html:
+                    m.text
+                      .replace(/\n/g,"<br/>")
+                      .replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>")
+                  }}
+                />
+              );
+              if (m.type==="ai") return (
+                <div key={i} className="msg-ai"
+                  dangerouslySetInnerHTML={{__html:
+                    m.text
+                      .replace(/\n/g,"<br/>")
+                      .replace(/\*\*(.*?)\*\*/g,"<strong style='color:var(--accent2)'>$1</strong>")
+                      .replace(/^###\s(.+)/gm,"<strong style='color:var(--accent);font-size:14px'>$1</strong>")
+                  }}
+                />
+              );
+              return null;
+            })}
+            {loading && (
+              <div className="msg-loading">
+                <div className="dots"><span/><span/><span/></div>
+                MAEIA analyse vos données...
+              </div>
+            )}
+            <div ref={bottomRef}/>
+          </div>
+
+          <div className="chat-input-row">
+            <textarea className="chat-input" rows={1}
+              placeholder="Posez votre question à MAEIA..."
+              value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={handleKey} style={{resize:"none",lineHeight:1.5}}/>
+            <button className="chat-send" onClick={()=>send(input)}
+              disabled={loading||!input.trim()}>Envoyer ↗</button>
+          </div>
+        </div>
+
+        {/* Side panel */}
+        <div className="agent-side">
+          <div className="side-card">
+            <div className="side-title">Questions suggérées</div>
+            {SUGGESTIONS.map((s,i)=>(
+              <button key={i} className="suggest-btn" onClick={()=>send(s)}>{s}</button>
+            ))}
+          </div>
+          <div className="side-card">
+            <div className="side-title">Outils disponibles ({TOOLS_LIST.length})</div>
+            {TOOLS_LIST.map(t=>(
+              <div key={t} className="tool-item">
+                <div className="tool-dot"/>
+                <code style={{fontSize:10,color:"var(--accent)",fontWeight:500}}>{t}()</code>
+              </div>
+            ))}
+          </div>
+          <div className="side-card">
+            <div className="side-title">Architecture ReAct</div>
+            <div style={{fontSize:11,color:"var(--muted)",lineHeight:2,
+              fontFamily:"'JetBrains Mono',monospace"}}>
+              Question →<br/>
+              <span style={{color:"var(--accent)"}}>  Reasoning</span><br/>
+              <span style={{color:"var(--accent-light)"}}>  Tool Selection</span><br/>
+              <span style={{color:"var(--warn)"}}>  Execution</span><br/>
+              <span style={{color:"var(--info)"}}>  Observation</span><br/>
+              → Réponse finale
+            </div>
+          </div>
+          <div className="side-card">
+            <div className="side-title">Session active</div>
+            <div className="seg-stat">
+              <span className="seg-stat-k">Messages</span>
+              <span className="seg-stat-v" style={{color:"var(--accent)"}}>{msgs.length}</span>
+            </div>
+            <div className="seg-stat">
+              <span className="seg-stat-k">Contexte</span>
+              <span className="seg-stat-v" style={{color:"var(--accent-light)"}}>{apiHistory.length} tours</span>
+            </div>
+            <div className="seg-stat">
+              <span className="seg-stat-k">Conversations</span>
+              <span className="seg-stat-v" style={{color:"var(--muted)"}}>{conversations.length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Conversation history in the sidebar is rendered by App ── */}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// APP ROOT
+// ═══════════════════════════════════════════════════════════════
+function App() {
+  const [page,setPage]     = useState("dashboard");
+  const [status,setStatus] = useState(null);
+  const [filters,setFilters] = useState({agences:[],regions:[],branches:[]});
+  const [fVals,setFVals]   = useState({agence:"all",region:"all",branche:"all",mois:0});
+
+  // ── Conversation state (persists across page nav) ──
+  // Each conv: { id, title, msgs, apiHistory, createdAt }
+  const [conversations, setConversations] = useState([]);
+  const [activeConvId, setActiveConvId]   = useState(null);
+
+  useEffect(()=>{
+    const check=()=>fetch(`${API}/status`).then(r=>r.json()).then(setStatus).catch(()=>setStatus(null));
+    check();const t=setInterval(check,8000);return()=>clearInterval(t);
+  },[]);
+
+  useEffect(()=>{
+    fetch(`${API}/filters`).then(r=>r.json()).then(setFilters).catch(()=>{});
+  },[]);
+
+  // Create a new conversation, return its id
+  const handleNewChat = (firstMsg = null) => {
+    const id = `conv_${Date.now()}`;
+    const title = firstMsg ? genTitle(firstMsg) : "Nouvelle conversation";
+    const newConv = { id, title, msgs:[], apiHistory:[], createdAt: new Date().toISOString() };
+    setConversations(prev => [newConv, ...prev]);
+    setActiveConvId(id);
+    setPage("agent");
+    return id;
+  };
+
+  // Update msgs + apiHistory for a conversation
+  const handleUpdateConv = (convId, newMsgs, newApiHistory) => {
+    setConversations(prev => prev.map(c => {
+      if (c.id !== convId) return c;
+      // Auto-update title from first user message if still default
+      let title = c.title;
+      if (title === "Nouvelle conversation") {
+        const firstUserMsg = newMsgs.find(m => m.type === "user");
+        if (firstUserMsg) title = genTitle(firstUserMsg.text);
+      }
+      return { ...c, msgs: newMsgs, apiHistory: newApiHistory, title };
+    }));
+  };
+
+  // Delete a conversation
+  const handleDeleteConv = (convId) => {
+    setConversations(prev => {
+      const updated = prev.filter(c => c.id !== convId);
+      if (activeConvId === convId) {
+        setActiveConvId(updated.length > 0 ? updated[0].id : null);
+      }
+      return updated;
+    });
+  };
+
+  // Select a conversation from history
+  const handleSelectConv = (convId) => {
+    setActiveConvId(convId);
+    setPage("agent");
+  };
+
+  const NAV = [
+    {id:"dashboard",    icon:"📊", label:"Tableau de Bord"},
+    {id:"forecast",     icon:"🔮", label:"Prévisions 2026"},
+    {id:"segmentation", icon:"👥", label:"Segmentation"},
+    {id:"agent",        icon:"🤖", label:"Agent IA"},
+  ];
+
+  return (
+    <div className="shell">
+      <nav className="sidebar">
+        <div className="sb-logo">
+          <img src="mae_logo.png" alt="MAE"
+            onError={e=>{e.target.style.display="none"}}/>
+          <div className="sb-logo-text">
+            <div className="sb-logo-name">MAE Intelligence</div>
+            <div className="sb-logo-sub">Aide à la décision</div>
+          </div>
+        </div>
+
+        <div className="sb-nav">
+          <div className="sb-section">Navigation</div>
+          {NAV.map(n=>(
+            <button key={n.id} className={`sb-item ${page===n.id&&(n.id!=="agent"||!conversations.length)?"active":""} ${n.id==="agent"&&page==="agent"?"active":""}`}
+              onClick={()=>{
+                if (n.id==="agent") {
+                  setPage("agent");
+                  // If no active conv, just go to agent page (shows empty state)
+                } else {
+                  setPage(n.id);
+                }
+              }}>
+              <span className="sb-icon">{n.icon}</span>{n.label}
+            </button>
+          ))}
+
+          {/* ── CONVERSATIONS SECTION ── */}
+          {conversations.length > 0 && (
+            <>
+              <div className="sb-section" style={{marginTop:8}}>
+                Conversations ({conversations.length})
+              </div>
+
+              {/* New chat button */}
+              <button className="new-chat-btn" onClick={()=>handleNewChat(null)}>
+                <span style={{fontSize:16}}>✦</span>
+                Nouvelle conversation
+              </button>
+
+              {/* History list */}
+              {conversations.map(conv => (
+                <button
+                  key={conv.id}
+                  className={`hist-item ${activeConvId===conv.id&&page==="agent"?"active-hist":""}`}
+                  onClick={()=>handleSelectConv(conv.id)}
+                >
+                  <span className="hist-icon">💬</span>
+                  <span className="hist-text">{conv.title}</span>
+                  <span className="hist-date">{fmtHistDate(conv.createdAt)}</span>
+                  <button
+                    className="hist-del"
+                    onClick={(e)=>{ e.stopPropagation(); handleDeleteConv(conv.id); }}
+                    title="Supprimer"
+                  >✕</button>
+                </button>
+              ))}
+            </>
+          )}
+
+          {/* If no conversations yet, show the new chat button alone */}
+          {conversations.length === 0 && page === "agent" && (
+            <>
+              <div className="sb-section" style={{marginTop:8}}>Conversations</div>
+              <button className="new-chat-btn" onClick={()=>handleNewChat(null)}>
+                <span style={{fontSize:16}}>✦</span>
+                Nouvelle conversation
+              </button>
+              <div className="hist-empty">Aucune conversation</div>
+            </>
+          )}
+        </div>
+
+        <div className="sb-footer">
+          <div className="sb-status">
+            <div className="pulse" style={{background:status?"#4cba6a":"#d93025"}}/>
+            {status
+              ?`Live · ${status.total_contrats?.toLocaleString()||0} contrats`
+              :"Backend offline"}
+          </div>
+          {status&&<div style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginTop:4,
+            fontFamily:"'JetBrains Mono',monospace"}}>
+            +{status.total_generated||0} générés
+          </div>}
+        </div>
+      </nav>
+
+      <main className="main" style={{display:"flex",flexDirection:"column"}}>
+        {page!=="agent"&&(
+          <Filters filters={filters} values={fVals}
+            onChange={(k,v)=>setFVals(p=>({...p,[k]:v}))}
+            onReset={()=>setFVals({agence:"all",region:"all",branche:"all",mois:0})}/>
+        )}
+        {page==="dashboard"     && <Dashboard filterVals={fVals}/>}
+        {page==="forecast"      && <Forecast/>}
+        {page==="segmentation"  && <Segmentation/>}
+        {page==="agent"         && (
+          <Agent
+            conversations={conversations}
+            activeConvId={activeConvId}
+            onNewChat={handleNewChat}
+            onSelectConv={handleSelectConv}
+            onDeleteConv={handleDeleteConv}
+            onUpdateConv={handleUpdateConv}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

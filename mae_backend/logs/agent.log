@@ -1,0 +1,467 @@
+2026-05-18 13:14:08,611 | ERROR | Gemini API error: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.
+2026-05-18 13:34:00,608 | ERROR | Gemini API error: 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash
+Please retry in 3.118945256s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_input_token_count"
+  quota_id: "GenerateContentInputTokensPerModelPerMinute-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+, retry_delay {
+  seconds: 3
+}
+]
+2026-05-18 13:54:14,980 | WARNING | ⚠️  Quota 429 atteint. Retry 1/3 après 48.8s...
+2026-05-18 13:55:04,335 | WARNING | ⚠️  Quota 429 atteint. Retry 2/3 après 59.8s...
+2026-05-18 13:56:04,338 | ERROR | Gemini API error: 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+Please retry in 59.432935099s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_input_token_count"
+  quota_id: "GenerateContentInputTokensPerModelPerMinute-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+, retry_delay {
+  seconds: 59
+}
+]
+2026-05-18 14:56:03,261 | WARNING | ⚠️  Quota 429 atteint. Retry 1/3 après 5.0s...
+2026-05-18 14:56:08,449 | WARNING | ⚠️  Quota 429 atteint. Retry 2/3 après 55.2s...
+2026-05-18 14:57:03,835 | ERROR | Gemini API error: 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+Please retry in 59.794920786s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_input_token_count"
+  quota_id: "GenerateContentInputTokensPerModelPerMinute-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+, retry_delay {
+  seconds: 59
+}
+]
+2026-05-19 23:27:28,818 | WARNING | ⚠️  Quota 429 atteint. Retry 1/3 après 31.2s...
+2026-05-19 23:28:00,208 | WARNING | ⚠️  Quota 429 atteint. Retry 2/3 après 59.8s...
+2026-05-19 23:29:00,349 | ERROR | Gemini API error: 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash
+Please retry in 59.861617946s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_input_token_count"
+  quota_id: "GenerateContentInputTokensPerModelPerMinute-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+, retry_delay {
+  seconds: 59
+}
+]
+2026-05-20 00:43:02,750 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 00:43:02,808 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 00:43:02,809 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 00:43:03,082 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 00:43:03,082 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 00:43:03,082 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 00:43:03,402 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 00:43:03,405 | INFO | Tool call: segments | inputs: None
+2026-05-20 00:43:03,406 | ERROR | Tool error segments: main.tool_segments() argument after ** must be a mapping, not NoneType
+2026-05-20 00:43:03,408 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 00:43:03,408 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 00:43:03,517 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 00:43:03,519 | INFO | Retrying request to /openai/v1/chat/completions in 12.000000 seconds
+2026-05-20 00:43:16,032 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 00:43:16,035 | INFO | Tool call: detect_anomalies | inputs: None
+2026-05-20 00:43:16,037 | ERROR | Tool error detect_anomalies: main.tool_detect_anomalies() argument after ** must be a mapping, not NoneType
+2026-05-20 00:43:16,327 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 00:43:16,329 | INFO | Retrying request to /openai/v1/chat/completions in 8.000000 seconds
+2026-05-20 00:43:25,484 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 00:43:25,632 | INFO | Q: Quels clients sont à risque ? | Tools: ['risk_analysis', 'risk_analysis', 'segments', 'risk_analysis', 'detect_anomalies'] | 25897ms
+2026-05-20 01:14:34,897 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:14:34,904 | INFO | Tool call: forecast | inputs: {'mois_num': 6}
+2026-05-20 01:14:35,330 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:14:35,697 | INFO | Q: Quel est le CA prévu pour juin 2026 ? | Tools: ['forecast'] | 1246ms
+2026-05-20 01:17:32,716 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:17:32,720 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:17:32,722 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:17:32,972 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:17:32,980 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:17:32,980 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:17:33,578 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:17:33,580 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:17:33,581 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:17:33,660 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:17:33,660 | INFO | Retrying request to /openai/v1/chat/completions in 2.000000 seconds
+2026-05-20 01:17:35,763 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:17:35,765 | INFO | Retrying request to /openai/v1/chat/completions in 10.000000 seconds
+2026-05-20 01:17:46,146 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:17:46,146 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:17:46,151 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:17:46,379 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:17:46,381 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:17:46,381 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:17:46,486 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:17:46,488 | INFO | Retrying request to /openai/v1/chat/completions in 6.000000 seconds
+2026-05-20 01:17:52,880 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:17:52,880 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:17:52,883 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:17:52,976 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:17:52,976 | INFO | Retrying request to /openai/v1/chat/completions in 8.000000 seconds
+2026-05-20 01:18:02,790 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:18:02,791 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:18:02,791 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:18:03,105 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:18:03,106 | INFO | Retrying request to /openai/v1/chat/completions in 8.000000 seconds
+2026-05-20 01:18:15,112 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:18:15,114 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:18:15,114 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:18:25,452 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:18:25,461 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 01:18:25,461 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 01:18:25,543 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:18:25,543 | INFO | Retrying request to /openai/v1/chat/completions in 1.000000 seconds
+2026-05-20 01:18:26,912 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:18:26,915 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 01:18:26,915 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 01:18:27,006 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:18:27,006 | INFO | Retrying request to /openai/v1/chat/completions in 7.000000 seconds
+2026-05-20 01:18:35,228 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:18:35,228 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 01:18:35,233 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 01:18:35,603 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:18:35,605 | INFO | Retrying request to /openai/v1/chat/completions in 8.000000 seconds
+2026-05-20 01:18:44,016 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:18:44,019 | INFO | Tool call: detect_anomalies | inputs: None
+2026-05-20 01:18:44,019 | ERROR | Tool error detect_anomalies: main.tool_detect_anomalies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:18:44,126 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:18:44,126 | INFO | Retrying request to /openai/v1/chat/completions in 7.000000 seconds
+2026-05-20 01:18:52,039 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:18:52,040 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 01:18:52,043 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 01:18:52,044 | INFO | Tool call: detect_anomalies | inputs: None
+2026-05-20 01:18:52,044 | ERROR | Tool error detect_anomalies: main.tool_detect_anomalies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:18:52,140 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:18:52,140 | INFO | Retrying request to /openai/v1/chat/completions in 9.000000 seconds
+2026-05-20 01:19:01,824 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:19:01,833 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:19:01,834 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:01,834 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 01:19:01,834 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:01,836 | INFO | Tool call: detect_anomalies | inputs: None
+2026-05-20 01:19:01,836 | ERROR | Tool error detect_anomalies: main.tool_detect_anomalies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:01,941 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:19:01,949 | INFO | Retrying request to /openai/v1/chat/completions in 9.000000 seconds
+2026-05-20 01:19:11,397 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:19:11,397 | INFO | Tool call: profil_clients | inputs: None
+2026-05-20 01:19:11,397 | ERROR | Tool error profil_clients: main.tool_profil_clients() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:11,403 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 01:19:11,404 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:11,404 | INFO | Tool call: detect_anomalies | inputs: None
+2026-05-20 01:19:11,404 | ERROR | Tool error detect_anomalies: main.tool_detect_anomalies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:11,502 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 01:19:11,503 | INFO | Retrying request to /openai/v1/chat/completions in 10.000000 seconds
+2026-05-20 01:19:21,998 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:19:22,003 | INFO | Tool call: profil_clients | inputs: None
+2026-05-20 01:19:22,003 | ERROR | Tool error profil_clients: main.tool_profil_clients() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:22,004 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 01:19:22,005 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:22,006 | INFO | Tool call: detect_anomalies | inputs: None
+2026-05-20 01:19:22,006 | ERROR | Tool error detect_anomalies: main.tool_detect_anomalies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:22,006 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 01:19:22,006 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 01:19:57,092 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:19:57,098 | INFO | Tool call: forecast | inputs: {'mois_num': 6}
+2026-05-20 01:19:57,866 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 01:19:57,932 | INFO | Q: Quel est le CA prévu pour juin 2026 ? | Tools: ['forecast'] | 1603ms
+2026-05-20 13:52:25,302 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 13:52:25,335 | INFO | Tool call: forecast | inputs: {'mois_num': 10}
+2026-05-20 13:52:25,337 | INFO | Tool call: forecast | inputs: {'mois_num': 11}
+2026-05-20 13:52:25,337 | INFO | Tool call: forecast | inputs: {'mois_num': 12}
+2026-05-20 13:52:26,698 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 13:52:26,782 | INFO | Q: donner une explication des prévisions du mois octobre et novembre et decembre 20 | Tools: ['forecast', 'forecast', 'forecast'] | 4188ms
+2026-05-20 13:55:16,345 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 13:55:16,348 | INFO | Tool call: forecast | inputs: {'mois_num': 10}
+2026-05-20 13:55:16,348 | INFO | Tool call: forecast | inputs: {'mois_num': 11}
+2026-05-20 13:55:16,348 | INFO | Tool call: forecast | inputs: {'mois_num': 12}
+2026-05-20 13:55:17,340 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 13:55:17,428 | INFO | Q: expliquer les prévisions des mois octobre novembre et decembre | Tools: ['forecast', 'forecast', 'forecast'] | 1592ms
+2026-05-20 13:55:30,112 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 13:55:30,114 | INFO | Tool call: forecast | inputs: {'mois_num': 10}
+2026-05-20 13:55:30,116 | INFO | Tool call: forecast | inputs: {'mois_num': 11}
+2026-05-20 13:55:30,117 | INFO | Tool call: forecast | inputs: {'mois_num': 12}
+2026-05-20 13:55:30,992 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 13:55:31,062 | INFO | Q: c'est pas en euros | Tools: ['forecast', 'forecast', 'forecast'] | 2125ms
+2026-05-20 15:39:56,462 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 15:39:56,462 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 15:39:56,471 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 15:39:57,364 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 15:39:57,364 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 15:39:57,364 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 15:39:57,458 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 15:39:57,458 | INFO | Retrying request to /openai/v1/chat/completions in 2.000000 seconds
+2026-05-20 15:39:59,837 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 15:39:59,838 | INFO | Tool call: compare_agencies | inputs: {}
+2026-05-20 15:40:00,100 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 15:40:00,103 | INFO | Retrying request to /openai/v1/chat/completions in 16.000000 seconds
+2026-05-20 15:40:17,921 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 15:40:18,147 | INFO | Q: Compare les performances des agences | Tools: ['compare_agencies', 'compare_agencies', 'compare_agencies'] | 22966ms
+2026-05-20 15:40:32,801 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 15:40:32,804 | INFO | Tool call: detect_anomalies | inputs: None
+2026-05-20 15:40:32,804 | ERROR | Tool error detect_anomalies: main.tool_detect_anomalies() argument after ** must be a mapping, not NoneType
+2026-05-20 15:40:33,335 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 15:40:33,337 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 15:40:33,337 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 15:40:33,500 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 15:40:33,501 | INFO | Retrying request to /openai/v1/chat/completions in 12.000000 seconds
+2026-05-20 15:40:45,718 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 15:40:45,719 | INFO | Retrying request to /openai/v1/chat/completions in 1.000000 seconds
+2026-05-20 15:40:46,801 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 15:40:46,802 | ERROR | Groq API error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01ks180jpaejzavtg32k7gb0v2` service tier `on_demand` on tokens per minute (TPM): Limit 12000, Used 9042, Requested 4619. Please try again in 8.305s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+2026-05-20 15:41:00,460 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 15:41:00,462 | INFO | Tool call: forecast | inputs: {'mois_num': 6}
+2026-05-20 15:41:01,224 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 15:41:01,328 | INFO | Q: Quel est le CA prévu pour juin 2026 ? | Tools: ['forecast'] | 1642ms
+2026-05-20 16:49:15,244 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:49:15,291 | INFO | Tool call: portfolio_summary | inputs: {}
+2026-05-20 16:49:16,837 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:49:16,841 | INFO | Tool call: compare_agencies | inputs: {}
+2026-05-20 16:49:16,966 | INFO | Tool call: sinistres_stats | inputs: {}
+2026-05-20 16:49:17,029 | INFO | Tool call: forecast | inputs: {'mois_num': 6}
+2026-05-20 16:49:18,544 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:49:18,680 | INFO | Q: Résume le portefeuille MAE en temps réel | Tools: ['portfolio_summary', 'compare_agencies', 'sinistres_stats', 'forecast'] | 8557ms
+2026-05-20 16:49:38,464 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:49:38,468 | INFO | Tool call: portfolio_summary | inputs: {}
+2026-05-20 16:49:38,543 | INFO | Tool call: risk_analysis | inputs: {}
+2026-05-20 16:49:38,623 | INFO | Tool call: top_agencies | inputs: {'n': 3}
+2026-05-20 16:49:38,711 | INFO | Tool call: forecast | inputs: {'mois_num': 6}
+2026-05-20 16:49:38,821 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 16:49:38,823 | INFO | Retrying request to /openai/v1/chat/completions in 3.000000 seconds
+2026-05-20 16:49:42,626 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:49:42,757 | INFO | Q: Recommandations stratégiques prioritaires | Tools: ['portfolio_summary', 'risk_analysis', 'top_agencies', 'forecast'] | 5169ms
+2026-05-20 16:50:43,642 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:50:43,649 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 16:50:43,649 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 16:50:44,734 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:50:44,860 | INFO | Q: Analyse les risques du portefeuille | Tools: ['risk_analysis'] | 1694ms
+2026-05-20 16:51:46,896 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:51:46,899 | INFO | Tool call: forecast | inputs: {'mois_num': 6}
+2026-05-20 16:51:47,271 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 16:51:47,396 | INFO | Q: Quel est le CA prévu pour juin 2026 ? | Tools: ['forecast'] | 955ms
+2026-05-20 17:02:21,040 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:02:21,043 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 17:02:21,044 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 17:02:21,318 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:02:21,321 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 17:02:21,321 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 17:02:21,660 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:02:21,664 | INFO | Tool call: compare_agencies | inputs: {}
+2026-05-20 17:02:21,910 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:02:21,910 | INFO | Retrying request to /openai/v1/chat/completions in 18.000000 seconds
+2026-05-20 17:02:41,023 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:02:41,153 | INFO | Q: Compare les performances des agences | Tools: ['compare_agencies', 'compare_agencies', 'compare_agencies'] | 20978ms
+2026-05-20 17:02:49,060 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:02:49,061 | INFO | Retrying request to /openai/v1/chat/completions in 2.000000 seconds
+2026-05-20 17:02:51,412 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:02:51,412 | INFO | Tool call: compare_agencies | inputs: None
+2026-05-20 17:02:51,412 | ERROR | Tool error compare_agencies: main.tool_compare_agencies() argument after ** must be a mapping, not NoneType
+2026-05-20 17:02:51,419 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 17:02:51,420 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 17:02:51,420 | INFO | Tool call: detect_anomalies | inputs: None
+2026-05-20 17:02:51,421 | ERROR | Tool error detect_anomalies: main.tool_detect_anomalies() argument after ** must be a mapping, not NoneType
+2026-05-20 17:02:51,506 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:02:51,509 | INFO | Retrying request to /openai/v1/chat/completions in 10.000000 seconds
+2026-05-20 17:03:02,590 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:03:02,739 | INFO | Q: Recommandations stratégiques prioritaires | Tools: ['compare_agencies', 'risk_analysis', 'detect_anomalies'] | 13853ms
+2026-05-20 17:03:20,690 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:03:20,694 | INFO | Tool call: portfolio_summary | inputs: None
+2026-05-20 17:03:20,694 | ERROR | Tool error portfolio_summary: main.tool_portfolio_summary() argument after ** must be a mapping, not NoneType
+2026-05-20 17:03:21,035 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:03:21,037 | INFO | Tool call: portfolio_summary | inputs: {}
+2026-05-20 17:03:21,243 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:03:21,244 | INFO | Retrying request to /openai/v1/chat/completions in 8.000000 seconds
+2026-05-20 17:03:30,684 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:03:30,831 | INFO | Q: hi | Tools: ['portfolio_summary', 'portfolio_summary'] | 10516ms
+2026-05-20 17:04:02,450 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:04:02,452 | INFO | Tool call: portfolio_summary | inputs: {'agence': 'Tunis Centre'}
+2026-05-20 17:04:02,922 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:04:03,057 | INFO | Q: donner l'agence la plus performante | Tools: ['portfolio_summary'] | 1074ms
+2026-05-20 17:04:29,609 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:04:29,612 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-20 17:04:29,612 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-20 17:04:30,125 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:04:30,128 | INFO | Tool call: portfolio_summary | inputs: {'agence': 'Nabeul'}
+2026-05-20 17:04:31,238 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:04:31,242 | INFO | Tool call: risk_analysis | inputs: {'agence': 'Nabeul'}
+2026-05-20 17:04:31,243 | ERROR | Tool error risk_analysis: tool_risk_analysis() got an unexpected keyword argument 'agence'
+2026-05-20 17:04:31,325 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:04:31,326 | ERROR | Groq API error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01ks180jpaejzavtg32k7gb0v2` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 98878, Requested 2142. Please try again in 14m41.28s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+2026-05-20 17:44:46,316 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-20 17:44:46,318 | INFO | Tool call: portfolio_summary | inputs: {}
+2026-05-20 17:44:46,468 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:44:46,468 | ERROR | Groq API error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01ks180jpaejzavtg32k7gb0v2` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99716, Requested 3741. Please try again in 49m46.847999999s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+2026-05-20 17:45:02,643 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:45:02,648 | ERROR | Groq API error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01ks180jpaejzavtg32k7gb0v2` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99698, Requested 3699. Please try again in 48m55.008s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+2026-05-20 17:45:04,489 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:45:04,489 | ERROR | Groq API error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01ks180jpaejzavtg32k7gb0v2` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99695, Requested 3779. Please try again in 50m1.536s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+2026-05-20 17:45:05,832 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 17:45:05,832 | ERROR | Groq API error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01ks180jpaejzavtg32k7gb0v2` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99694, Requested 1824. Please try again in 21m51.552s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+2026-05-20 18:26:12,180 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-20 18:26:12,220 | ERROR | Groq API error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01ks180jpaejzavtg32k7gb0v2` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 96839, Requested 3623. Please try again in 6m39.168s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+2026-05-21 14:38:25,912 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-21 14:38:25,925 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-21 14:38:25,925 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-21 14:38:26,233 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-21 14:38:26,233 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-21 14:38:26,233 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-21 14:38:26,464 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-21 14:38:26,470 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-21 14:38:26,472 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-21 14:38:26,541 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-21 14:38:26,547 | INFO | Retrying request to /openai/v1/chat/completions in 4.000000 seconds
+2026-05-21 14:38:31,387 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-21 14:38:31,387 | INFO | Tool call: risk_analysis | inputs: None
+2026-05-21 14:38:31,387 | ERROR | Tool error risk_analysis: main.tool_risk_analysis() argument after ** must be a mapping, not NoneType
+2026-05-21 14:38:31,471 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-05-21 14:38:31,471 | INFO | Retrying request to /openai/v1/chat/completions in 8.000000 seconds
+2026-05-21 14:38:40,942 | INFO | HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-21 14:38:41,017 | INFO | Q: Analyse les risques du portefeuille | Tools: ['risk_analysis', 'risk_analysis', 'risk_analysis', 'risk_analysis'] | 15857ms
