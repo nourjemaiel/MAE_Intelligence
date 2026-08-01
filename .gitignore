@@ -7,3 +7,11 @@ __pycache__/
 *.pyc
 mlflow.db
 .env
+
+# Genere au runtime par mae_backend/ -- pas du code source, ne devrait pas
+# etre versionne (chroma_db/reports/ changent a chaque demarrage/rapport,
+# logs/agent.log churn en continu et gonflerait chaque commit)
+mae_backend/logs/
+mae_backend/chroma_db/
+mae_backend/reports/
+.pytest_cache/

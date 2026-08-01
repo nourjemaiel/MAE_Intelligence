@@ -27,12 +27,13 @@ os.makedirs("plots", exist_ok=True)
 os.makedirs("outputs", exist_ok=True)
 
 # Noms des segments ordonnés par CA décroissant (index 0 = plus fort CA)
+# Emojis retirés pour éviter les avertissements de polices sous Windows/Matplotlib
 SEGMENT_NOMS = [
-    '🥇 Client Premium',
-    '🥈 Client Standard',
-    '🥉 Client Occasionnel',
-    '⚠️  Client à Risque',
-    '💤 Client Inactif',
+    'Client Premium',
+    'Client Standard',
+    'Client Occasionnel',
+    'Client a Risque',
+    'Client Inactif',
 ]
 
 # =================================================================
@@ -50,7 +51,7 @@ def load_and_prepare():
 
     # Âge (date de naissance NON time-shiftée — préservée dans le cleaning)
     if 'DT_NAISS' in df.columns:
-        df['DT_NAISS'] = pd.to_datetime(df['DT_NAISS'], errors='coerce')
+        df['DT_NAISS'] = pd.to_datetime(df['DT_NAISS'], errors='coerce', dayfirst=True)
         df['AGE'] = 2025 - df['DT_NAISS'].dt.year
     else:
         df['AGE'] = np.nan
@@ -119,18 +120,32 @@ def load_and_prepare():
 
 
 # =================================================================
-# 2. MÉTHODE DU COUDE + SILHOUETTE
+# 2. MÉTHODE DU COUDE + SILHOUETTE (AVEC SAMPLING INTELLIGENT)
 # =================================================================
 def plot_elbow(X_scaled):
     inertias    = []
     silhouettes = []
     K_range     = range(2, 9)
 
+    # Échantillonner pour calculer la silhouette rapidement (max 10 000 lignes)
+    np.random.seed(42)
+    sample_size = min(10000, len(X_scaled))
+    indices = np.random.choice(len(X_scaled), size=sample_size, replace=False)
+    X_sample = X_scaled[indices]
+
+    print(f"⚡ Analyse de la silhouette sur un échantillon représentatif de {sample_size:,} clients...")
+
     for k in K_range:
-        km = KMeans(n_clusters=k, random_state=42, n_init=10)
-        labels = km.fit_predict(X_scaled)
+        km = KMeans(n_clusters=k, random_state=42, n_init=5)
+        # On entraîne sur tout le dataset pour l'inertie globale
+        labels_full = km.fit_predict(X_scaled)
         inertias.append(km.inertia_)
-        silhouettes.append(silhouette_score(X_scaled, labels))
+        
+        # On calcule le score de silhouette uniquement sur l'échantillon
+        labels_sample = km.predict(X_sample)
+        score = silhouette_score(X_sample, labels_sample)
+        silhouettes.append(score)
+        print(f"   k={k} traité (Silhouette: {score:.3f})")
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle('Choix du Nombre de Clusters', fontsize=14, fontweight='bold')
@@ -155,8 +170,14 @@ def plot_elbow(X_scaled):
                  f' k={best_k} optimal', color='gray', fontsize=10)
 
     plt.tight_layout()
-    # CORRIGÉ : numérotation cohérente avec les autres scripts (08)
-    plt.savefig('plots/08_elbow_silhouette.png', dpi=150)
+    
+    # Suppression de sécurité pour Windows
+    out_path = 'plots/08_elbow_silhouette.png'
+    if os.path.exists(out_path):
+        try: os.remove(out_path)
+        except Exception: pass
+
+    plt.savefig(out_path, dpi=150)
     plt.close()
     print(f"✅ Plot 8 — Coude & Silhouette généré (k optimal = {best_k}).")
     return best_k
@@ -169,10 +190,16 @@ def train_kmeans(X_scaled, k):
     with mlflow.start_run(run_name=f"KMeans_k{k}"):
         model = KMeans(n_clusters=k, random_state=42, n_init=10)
         labels = model.fit_predict(X_scaled)
-        sil = silhouette_score(X_scaled, labels)
+        
+        # Silhouette rapide sur échantillon de 10k pour MLFlow
+        np.random.seed(42)
+        sample_size = min(10000, len(X_scaled))
+        indices = np.random.choice(len(X_scaled), size=sample_size, replace=False)
+        sil = silhouette_score(X_scaled[indices], labels[indices])
+        
         mlflow.log_param("k", k)
         mlflow.log_metric("silhouette_score", sil)
-        print(f"\n📊 KMeans k={k} — Silhouette Score : {sil:.3f}")
+        print(f"\n📊 KMeans k={k} — Silhouette Score (Échantillon) : {sil:.3f}")
     return model, labels
 
 
@@ -180,10 +207,6 @@ def train_kmeans(X_scaled, k):
 # 4. NOMMER LES CLUSTERS (mapping cluster_id → nom métier)
 # =================================================================
 def build_cluster_name_map(client_df, k):
-    """
-    Retourne un dict {cluster_id (int): nom_segment (str)}
-    trié par CA_TOTAL décroissant → Premium = cluster avec le plus fort CA.
-    """
     ca_by_cluster = (client_df.groupby('CLUSTER')['CA_TOTAL']
                      .mean()
                      .sort_values(ascending=False))
@@ -200,26 +223,39 @@ def build_cluster_name_map(client_df, k):
 # =================================================================
 def plot_pca(X_scaled, labels, k, name_map):
     pca   = PCA(n_components=2, random_state=42)
-    X_pca = pca.fit_transform(X_scaled)
+    # Pour accélérer l'affichage des 72k points, on sous-échantillonne à 50k points max pour le scatter plot
+    plot_sample_size = min(50000, len(X_scaled))
+    np.random.seed(42)
+    indices = np.random.choice(len(X_scaled), size=plot_sample_size, replace=False)
+    
+    X_scaled_sampled = X_scaled[indices]
+    labels_sampled = labels[indices]
+    
+    X_pca = pca.fit_transform(X_scaled_sampled)
     explained = pca.explained_variance_ratio_ * 100
 
     fig, ax = plt.subplots(figsize=(12, 8))
     for cluster_id in range(k):
-        mask  = labels == cluster_id
+        mask  = labels_sampled == cluster_id
         label = name_map.get(cluster_id, f'Segment {cluster_id+1}')
         ax.scatter(X_pca[mask, 0], X_pca[mask, 1],
                    c=PALETTE[cluster_id % len(PALETTE)],
                    label=label, alpha=0.45, s=14, edgecolors='none')
 
-    ax.set_title('Segmentation Clients — Projection PCA 2D',
+    ax.set_title('Segmentation Clients — Projection PCA 2D (Échantillon de 50k)',
                  fontsize=15, fontweight='bold', pad=15)
     ax.set_xlabel(f'Composante 1 ({explained[0]:.1f}% variance)', fontsize=11)
     ax.set_ylabel(f'Composante 2 ({explained[1]:.1f}% variance)', fontsize=11)
     ax.legend(fontsize=10, markerscale=2, loc='best')
     ax.grid(True, alpha=0.2)
     plt.tight_layout()
-    # CORRIGÉ : numéro 09
-    plt.savefig('plots/09_clustering_pca.png', dpi=150)
+    
+    out_path = 'plots/09_clustering_pca.png'
+    if os.path.exists(out_path):
+        try: os.remove(out_path)
+        except Exception: pass
+
+    plt.savefig(out_path, dpi=150)
     plt.close()
     print("✅ Plot 9 — PCA 2D généré.")
     return X_pca
@@ -229,12 +265,10 @@ def plot_pca(X_scaled, labels, k, name_map):
 # 6. PROFIL DE CHAQUE SEGMENT
 # =================================================================
 def plot_segment_profiles(client_df, k, name_map):
-    # Créer colonne label lisible pour l'axe X
     client_df = client_df.copy()
     client_df['SEG_LABEL'] = client_df['CLUSTER'].map(
         lambda c: name_map.get(int(c), f'Seg {c+1}')
     )
-    # Ordre : du plus fort CA au plus faible
     order = [name_map[i] for i in sorted(
         name_map.keys(),
         key=lambda c: client_df[client_df['CLUSTER'] == c]['CA_TOTAL'].mean(),
@@ -259,7 +293,6 @@ def plot_segment_profiles(client_df, k, name_map):
             axes[idx].set_visible(False)
             continue
 
-        # Grouper par label lisible et respecter l'ordre
         means = (client_df.groupby('SEG_LABEL')[col].mean() / divisor)
         means = means.reindex(order)
 
@@ -275,7 +308,11 @@ def plot_segment_profiles(client_df, k, name_map):
                 ha='center', fontsize=8, color='#444'
             )
         axes[idx].set_title(label, fontsize=11, fontweight='bold')
+        
+        # CORRIGÉ : Définition explicite des ticks avant les labels pour éviter l'avertissement UserWarning
+        axes[idx].set_xticks(range(len(means)))
         axes[idx].set_xticklabels(means.index, rotation=20, ha='right', fontsize=8)
+        
         axes[idx].grid(True, alpha=0.2, axis='y')
         axes[idx].set_ylim(bottom=0, top=means.max() * 1.25 if means.max() > 0 else 1)
         axes[idx].yaxis.set_major_formatter(
@@ -283,8 +320,13 @@ def plot_segment_profiles(client_df, k, name_map):
         )
 
     plt.tight_layout()
-    # CORRIGÉ : numéro 10
-    plt.savefig('plots/10_segment_profiles.png', dpi=150)
+    
+    out_path = 'plots/10_segment_profiles.png'
+    if os.path.exists(out_path):
+        try: os.remove(out_path)
+        except Exception: pass
+
+    plt.savefig(out_path, dpi=150)
     plt.close()
     print("✅ Plot 10 — Profils des segments généré.")
 
@@ -324,21 +366,18 @@ def print_summary(client_df, k, name_map):
 def export_results(client_df, name_map):
     out = client_df.copy()
 
-    # CORRIGÉ : on exporte le label lisible, pas juste le numéro brut
     out['CLUSTER_ID']    = out['CLUSTER'] + 1          # 1-indexed pour lisibilité
     out['Segment_Label'] = out['CLUSTER'].map(name_map) # label métier
 
     export_cols = ['N_CLIENT', 'CLUSTER_ID', 'Segment_Label',
                    'CA_TOTAL', 'PRIME_MOYENNE', 'NB_CONTRATS',
                    'AGE', 'BONUS_MALUS_MOY']
-    # Ajouter CAPITAUX_MOY si présent
     if 'CAPITAUX_MOY' in out.columns:
         export_cols.append('CAPITAUX_MOY')
 
     out[export_cols].to_csv('outputs/segments_clients.csv', index=False)
     print("\n📁 Exporté : outputs/segments_clients.csv")
 
-    # BONUS : sauvegarder aussi Production_Clusters.csv (lu par l'app Streamlit)
     prod_path    = "processed_data/Production_Cleaned.csv"
     cluster_path = "processed_data/Production_Clusters.csv"
     if os.path.exists(prod_path):
@@ -365,10 +404,10 @@ if __name__ == "__main__":
     scaler   = StandardScaler()
     X_scaled = scaler.fit_transform(client_df[features])
 
-    # Trouver k optimal
+    # Trouver k optimal (échantillonné pour aller ultra vite)
     best_k = plot_elbow(X_scaled)
 
-    # Forcer k entre 3 et 5
+    # Forcer k entre 3 et 5 pour garantir l'actionnabilité métier
     k = best_k if 3 <= best_k <= 5 else 4
     print(f"\n🎯 Nombre de clusters utilisé : k={k}")
 

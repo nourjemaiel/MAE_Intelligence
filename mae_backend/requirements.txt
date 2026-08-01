@@ -1,0 +1,35 @@
+# Dependances MINIMALES pour faire tourner mae_backend/ (FastAPI + agent
+# Groq), PAS une copie du requirements.txt racine (qui est un freeze complet
+# de l'environnement de recherche/notebooks : TensorFlow, PyTorch, Jupyter,
+# DVC... aucun de ces packages n'est importe par main.py/agent.py). Versions
+# alignees sur celles verifiees fonctionnelles dans le venv du projet.
+#
+# RAG (ChromaDB + sentence-transformers) et generation PDF (reportlab) sont
+# VOLONTAIREMENT EXCLUS par defaut de ce fichier : chromadb/sentence-
+# transformers tirent torch (~1-2 Go), un cout disproportionne pour ce que
+# ca apporte ici. Le code degrade deja proprement sans eux (RAG_AVAILABLE=
+# False, REPORT_AVAILABLE=False -- voir agent.py/main.py) : l'API tourne
+# normalement, seuls search_documents_metier et generate_report repondent
+# "indisponible". Pour les inclure, decommenter les 3 lignes en bas de ce
+# fichier.
+
+fastapi==0.123.9
+uvicorn==0.38.0
+pandas==2.3.3
+numpy==2.2.6
+python-dotenv==1.2.1
+mlflow==3.7.0
+# pydantic 2.12.5 (verifie sur Windows) verrouille pydantic-core==2.41.5,
+# qui n'a pas de wheel Linux publie (echec reproductible dans python:3.11-
+# slim). 2.11.5 verrouille pydantic-core==2.33.2, dont le wheel manylinux
+# cp311 est confirme disponible -- verifie directement via
+# "pip download --platform manylinux2014_x86_64 --python-version 3.11".
+pydantic==2.11.5
+groq==1.2.0
+
+# --- Optionnel : PDF (leger, pas de dependance lourde) ---
+reportlab>=4.0,<5.0
+
+# --- Optionnel : RAG (LOURD, ~1-2 Go avec torch) ---
+# chromadb>=0.5,<0.6
+# sentence-transformers>=3.0,<4.0

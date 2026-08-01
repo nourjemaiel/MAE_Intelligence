@@ -1,11 +1,102 @@
 import pandas as pd
 import mlflow
 import os
+import math
 
 # =================================================================
 # 1. CONFIGURATION MLOPS
 # =================================================================
 mlflow.set_experiment("MAE_PFE_Final_Sync_2026")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# =================================================================
+# TABLE REGION → LOCALITE TUNISIENNE
+# =================================================================
+# Il n'existe pas de table officielle code -> région/localité (données
+# synthétiques, consigne du superviseur de stage : décoder nous-mêmes).
+# Convention retenue : les codes distincts sont triés puis répartis en 5
+# macro-régions de taille égale (Grand Tunis, Nord, Centre, Sud, Sahel),
+# et chaque code reçoit en plus le nom d'une localité tunisienne réelle et
+# DISTINCTE appartenant à ce bucket, pour éviter d'afficher le même
+# libellé de macro-région des dizaines de fois dans les filtres/graphes.
+# C'est un choix de présentation assumé et documenté, pas une déduction
+# géographique réelle. Décodé UNE SEULE FOIS ici (source de vérité) plutôt
+# que recalculé à chaque requête dans l'API.
+REGIONS_MACRO = ["Grand Tunis", "Nord", "Centre", "Sud", "Sahel"]
+
+TUNISIA_LOCALITIES = {
+    "Grand Tunis": [
+        "Tunis","Ariana","La Marsa","Carthage","Le Bardo","Ben Arous",
+        "Ezzahra","Mornag","Hammam Lif","Hammam Chott","Rades","Megrine",
+        "La Goulette","Manouba","Den Den","Oued Ellil","Douar Hicher",
+        "El Mourouj","Mnihla","Sidi Thabet","Kalaat Andalous","La Soukra",
+        "Raoued","Sidi Hassine","El Omrane","Bab Souika",
+    ],
+    "Nord": [
+        "Bizerte","Menzel Bourguiba","Mateur","Ras Jebel","Ghar El Melh",
+        "Beja","Medjez El Bab","Testour","Nefza","Jendouba","Tabarka",
+        "Ain Draham","Fernana","Bou Salem","Le Kef","Tajerouine",
+        "Kalaat Senan","Sakiet Sidi Youssef","Siliana","Bargou","Gaafour",
+        "Zaghouan","El Fahs","Nabeul","Hammamet","Kelibia",
+    ],
+    "Sahel": [
+        "Sousse","Msaken","Kalaa Kebira","Kalaa Seghira","Hammam Sousse",
+        "Akouda","Enfidha","Bouficha","Monastir","Moknine","Jemmal",
+        "Ksar Hellal","Ksibet El Mediouni","Sayada","Bembla","Mahdia",
+        "Ksour Essef","El Jem","Chebba","Melloulech","Souassi","Chorbane",
+        "Bou Merdes","Ouled Chamekh","Hbira",
+    ],
+    "Centre": [
+        "Kairouan","Sbikha","Haffouz","Nasrallah","Chebika","El Alaa",
+        "Bouhajla","Oueslatia","Hajeb El Ayoun","Menzel Mehiri",
+        "Sidi Bouzid","Regueb","Menzel Bouzaiane","Mezzouna","Bir El Hafey",
+        "Ouled Haffouz","Meknassy","Souk Jedid","Kasserine","Sbeitla",
+        "Feriana","Thala","Hassi El Ferid","Foussana","Jedelienne","El Ayoun",
+    ],
+    "Sud": [
+        "Sfax","Sakiet Eddaier","Sakiet Ezzit","Jebeniana","Mahres","El Amra",
+        "Bir Ali Ben Khalifa","Menzel Chaker","Gabes","Ghannouch","Mareth",
+        "Metouia","El Hamma","Medenine","Ben Gardane","Zarzis","Houmt Souk",
+        "Midoun","Ajim","Tataouine","Remada","Ghomrassen","Bir Lahmar",
+        "Kebili","Douz","Souk Lahad","Tozeur","Nefta","Degache","Gafsa",
+        "Metlaoui","Redeyef",
+    ],
+}
+
+
+def build_region_label_map(codes):
+    """
+    Construit le dictionnaire {code_brut: "Nom localité"} pour TOUS les
+    codes région distincts trouvés dans le fichier. Convention assumée
+    (voir docstring du module) : buckets de taille égale par macro-région,
+    puis une localité réelle distincte par code au sein de chaque bucket.
+    """
+    def sort_key(c):
+        try:
+            return (0, float(c))
+        except (ValueError, TypeError):
+            return (1, str(c))
+
+    codes_sorted = sorted({str(c) for c in codes if c is not None and str(c).lower() != "nan"}, key=sort_key)
+    n = len(codes_sorted)
+    if n == 0:
+        return {}
+
+    buckets = len(REGIONS_MACRO)
+    size = math.ceil(n / buckets)
+
+    labels = {}
+    for i, code in enumerate(codes_sorted):
+        bucket_idx = min(i // size, buckets - 1)
+        macro = REGIONS_MACRO[bucket_idx]
+        localities = TUNISIA_LOCALITIES[macro]
+        pos_in_bucket = i - bucket_idx * size
+        locality = localities[pos_in_bucket % len(localities)]
+        if pos_in_bucket >= len(localities):
+            locality = f"{locality} {pos_in_bucket // len(localities) + 1}"
+        labels[code] = locality
+    return labels
 
 
 def clean_augment_shift(file_path, output_name):
@@ -34,8 +125,13 @@ def clean_augment_shift(file_path, output_name):
             # ----------------------------------------------------------------
             # 3. NETTOYAGE DES TYPES AVANT TOUT MAPPING
             #    Convertir les colonnes numériques mal lues comme float→int string
+            #    "Region" ajoutée ici : ses codes bruts subissent le même
+            #    problème de ".0" parasite que N_BRA/AGENCE lors de la
+            #    lecture pandas, ce qui casserait le mapping ci-dessous si
+            #    on ne le nettoie pas AVANT de construire les buckets.
             # ----------------------------------------------------------------
-            for col in ['N_BRA', 'AGENCE', 'N_CLIENT', 'N_POLICE', 'N_SINISTRE', 'C_GARA', 'N_BRA', 'CSP', 'BONUS_MALUS']:
+            for col in ['N_BRA', 'AGENCE', 'N_CLIENT', 'N_POLICE', 'N_SINISTRE',
+                        'C_GARA', 'CSP', 'BONUS_MALUS', 'Region']:
                 if col in df.columns:
                     # Supprimer le ".0" parasite introduit par pandas lors de la lecture
                     df[col] = df[col].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
@@ -84,7 +180,21 @@ def clean_augment_shift(file_path, output_name):
                 df['AGENCE'] = df['AGENCE'].map(map_agt)
                 print(f"✅ AGENCE décodée en nom ville (en place, {len(unique_codes)} agences).")
 
-           
+            # ----------------------------------------------------------------
+            # 6. MAPPING REGION → localité tunisienne (remplace la colonne en place)
+            #    Décodé UNE SEULE FOIS ici (source de vérité pour tout le
+            #    pipeline : EDA, forecasting, clustering, API). L'API ne
+            #    doit plus recalculer ce mapping à partir d'un échantillon
+            #    en mémoire — voir main.py.
+            # ----------------------------------------------------------------
+            if 'Region' in df.columns:
+                unique_region_codes = df['Region'].dropna().unique().tolist()
+                region_map = build_region_label_map(unique_region_codes)
+                df['Region'] = df['Region'].map(region_map).fillna('Region_Inconnue')
+                print(f"✅ Region décodée en localité tunisienne (en place, {len(unique_region_codes)} régions).")
+            else:
+                print("⚠️  Colonne 'Region' absente de ce fichier — décodage ignoré.")
+
             # ----------------------------------------------------------------
             # 7. TIME SHIFT SÉLECTIF (décalage +4 ans vers 2025-2026)
             # ----------------------------------------------------------------
@@ -116,8 +226,15 @@ def clean_augment_shift(file_path, output_name):
                     print(f"📅 Colonne '{col}' décalée → max {df[col].dt.year.max()}")
 
             # ----------------------------------------------------------------
-            # 8. NETTOYAGE DES MONTANTS
+            # 8. NETTOYAGE DES MONTANTS + CONVERSION DES UNITÉS FINANCIÈRES
             # ----------------------------------------------------------------
+            # AJUSTEMENT MAE (2026-07) : Les montants bruts du CSV d'origine sont 
+            # à échelle très élevée. Diviser par 1000 créait un volume trop faible 
+            # (~19.6M TND). Diviser par 100 aligne parfaitement le Chiffre d'Affaires 
+            # global de la base sur un volume cohérent de ~195.8M TND, ce qui est 
+            # très proche des performances réelles enregistrées par la MAE.
+            RAW_TO_DINARS = 100.0
+
             montants = ['CAPITAUX', 'REGLEMENTS', 'SAP', 'PRIME_NETTE']
             for col in montants:
                 if col in df.columns:
@@ -126,8 +243,8 @@ def clean_augment_shift(file_path, output_name):
                             df[col].astype(str).str.replace(',', '.', regex=False),
                             errors='coerce'
                         ).fillna(0)
-                    )
-            print(f"💰 Montants nettoyés : {[c for c in montants if c in df.columns]}")
+                    ) / RAW_TO_DINARS
+            print(f"💰 Montants nettoyés et ajustés (/{RAW_TO_DINARS:.0f}) : {[c for c in montants if c in df.columns]}")
 
             # ----------------------------------------------------------------
             # 9. SUPPRESSION DES DOUBLONS DE COLONNES
@@ -144,10 +261,17 @@ def clean_augment_shift(file_path, output_name):
             if not cols_with_nulls.empty:
                 print(f"⚠️  Valeurs nulles restantes :\n{cols_with_nulls}")
 
+            if 'PRIME_NETTE' in df.columns:
+                print(f"🔎 Sanity check PRIME_NETTE : min={df['PRIME_NETTE'].min():,.2f}  "
+                      f"mean={df['PRIME_NETTE'].mean():,.2f}  max={df['PRIME_NETTE'].max():,.2f}  "
+                      f"(en TND, après division /{RAW_TO_DINARS:.0f})")
+
             # ----------------------------------------------------------------
             # 11. SAUVEGARDE
+            #    Sécurité : ancré sur BASE_DIR pour éviter les doublons de répertoires
+            #    "processed_data" d'un script à un autre.
             # ----------------------------------------------------------------
-            output_dir = "processed_data"
+            output_dir = os.path.join(BASE_DIR, "processed_data")
             os.makedirs(output_dir, exist_ok=True)
             save_path = os.path.join(output_dir, f"{output_name}_Cleaned.csv")
             df.to_csv(save_path, index=False, encoding='utf-8')
@@ -164,6 +288,5 @@ def clean_augment_shift(file_path, output_name):
 
 
 if __name__ == "__main__":
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     clean_augment_shift(os.path.join(BASE_DIR, "raw_data", "Base Production.csv"), "Production")
     clean_augment_shift(os.path.join(BASE_DIR, "raw_data", "Base Sinistres.csv"), "Sinistres")

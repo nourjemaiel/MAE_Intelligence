@@ -5,6 +5,13 @@ import seaborn as sns
 import os
 
 # =================================================================
+# CHEMINS ABSOLUS (Sécurité d'exécution)
+# =================================================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PLOTS_DIR = os.path.join(BASE_DIR, "plots")
+os.makedirs(PLOTS_DIR, exist_ok=True)
+
+# =================================================================
 # CONFIGURATION VISUELLE
 # =================================================================
 plt.style.use('seaborn-v0_8-whitegrid')
@@ -17,14 +24,13 @@ PASTEL_ORANGE = '#FFDAB9'
 PALETTE = [PASTEL_BLUE, PASTEL_PINK, PASTEL_PURPLE, PASTEL_GREEN, PASTEL_ORANGE,
            '#FFFACD', '#D4F1F4', '#E8D5B7', '#F0E6EF', '#C7CEEA']
 
-os.makedirs("plots", exist_ok=True)
 
 # =================================================================
 # CHARGEMENT DES DONNÉES
 # =================================================================
 def load_data():
-    path_prod = "processed_data/Production_Cleaned.csv"
-    path_sini = "processed_data/Sinistres_Cleaned.csv"
+    path_prod = os.path.join(BASE_DIR, "processed_data", "Production_Cleaned.csv")
+    path_sini = os.path.join(BASE_DIR, "processed_data", "Sinistres_Cleaned.csv")
 
     if not os.path.exists(path_prod):
         print(f"❌ Fichier introuvable : {path_prod}")
@@ -39,10 +45,24 @@ def load_data():
     if df_sini is not None and 'DATE_ACCIDENT' in df_sini.columns:
         df_sini['DATE_ACCIDENT'] = pd.to_datetime(df_sini['DATE_ACCIDENT'], errors='coerce')
 
-    # Filtrer 2025
-    df_prod_2025 = df_prod[df_prod['DEBUT_PERI'].dt.year == 2025].copy()
-    print(f"✅ Données chargées : {len(df_prod_2025):,} contrats (2025)")
-    return df_prod_2025, df_sini
+    # Ajustement dynamique de l'année historique cible (2025)
+    target_year = 2025
+    df_prod_filtered = df_prod[df_prod['DEBUT_PERI'].dt.year == target_year].copy()
+    
+    if len(df_prod_filtered) == 0:
+        available_years = df_prod['DEBUT_PERI'].dt.year.dropna().unique()
+        print(f"⚠️  Aucune donnée trouvée pour l'année {target_year}.")
+        print(f"👉 Années disponibles dans vos données nettoyées : {sorted(list(available_years))}")
+        if len(available_years) > 0:
+            target_year = int(max(available_years))
+            df_prod_filtered = df_prod[df_prod['DEBUT_PERI'].dt.year == target_year].copy()
+            print(f"🔄 Redirection automatique vers l'année la plus récente disponible : {target_year}")
+        else:
+            print("❌ Erreur critique : Aucune date valide trouvée dans la colonne DEBUT_PERI.")
+            return None, None
+
+    print(f"✅ Données chargées : {len(df_prod_filtered):,} contrats (Exercice {target_year})")
+    return df_prod_filtered, df_sini
 
 
 # =================================================================
@@ -66,7 +86,7 @@ def plot_top_agences(df):
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x/1e6:.0f}M'))
     ax.set_xlim(0, top.values.max() * 1.15)
     plt.tight_layout()
-    plt.savefig('plots/01_top_agences_ca.png', dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, '01_top_agences_ca.png'), dpi=150)
     plt.close()
     print("✅ Plot 1 — Top Agences généré.")
 
@@ -75,18 +95,17 @@ def plot_top_agences(df):
 # PLOT 2 — RÉPARTITION PAR BRANCHE
 # =================================================================
 def plot_repartition_branche(df):
-    # CORRIGÉ : N_BRA contient directement les libellés après cleaning
     col = 'N_BRA'
     branche = df[col].value_counts()
 
     fig, ax = plt.subplots(figsize=(13, 6))
-    bars = ax.bar(range(len(branche)), branche.values,
+    bars = ax.bar(range(len(branche)), bars_y := branche.values,
                   color=PALETTE[:len(branche)], edgecolor='white')
 
-    for i, (bar, val) in enumerate(zip(bars, branche.values)):
+    for bar, val in zip(bars, bars_y):
         pct = val / branche.sum() * 100
         ax.text(bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + branche.values.max() * 0.01,
+                bar.get_height() + max(bars_y) * 0.01,
                 f'{pct:.1f}%', ha='center', fontsize=9, color='#444')
 
     ax.set_xticks(range(len(branche)))
@@ -96,7 +115,7 @@ def plot_repartition_branche(df):
     ax.set_ylabel('Nombre de Contrats')
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{int(x):,}'))
     plt.tight_layout()
-    plt.savefig('plots/02_repartition_branche.png', dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, '02_repartition_branche.png'), dpi=150)
     plt.close()
     print("✅ Plot 2 — Répartition Branche généré.")
 
@@ -127,7 +146,7 @@ def plot_evolution_mensuelle(df):
                  fontsize=15, fontweight='bold', pad=15)
     ax.set_ylabel('Primes Nettes (TND)')
     plt.tight_layout()
-    plt.savefig('plots/03_tendance_temporelle.png', dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, '03_tendance_temporelle.png'), dpi=150)
     plt.close()
     print("✅ Plot 3 — Évolution Mensuelle généré.")
 
@@ -145,8 +164,10 @@ def plot_sinistres_vs_primes(df_prod, df_sini):
 
     df_prod['Mois'] = df_prod['DEBUT_PERI'].dt.to_period('M').astype(str)
     df_sini['DATE_ACCIDENT'] = pd.to_datetime(df_sini['DATE_ACCIDENT'], errors='coerce')
-    # Filtrer sinistres 2025 uniquement
-    df_sini = df_sini[df_sini['DATE_ACCIDENT'].dt.year == 2025]
+    
+    analyzed_year = df_prod['DEBUT_PERI'].dt.year.dropna().iloc[0]
+    
+    df_sini = df_sini[df_sini['DATE_ACCIDENT'].dt.year == analyzed_year]
     df_sini['Mois'] = df_sini['DATE_ACCIDENT'].dt.to_period('M').astype(str)
 
     primes    = df_prod.groupby('Mois')['PRIME_NETTE'].sum()
@@ -176,7 +197,7 @@ def plot_sinistres_vs_primes(df_prod, df_sini):
     ax.set_ylabel('Montant (TND)')
     ax.legend()
     plt.tight_layout()
-    plt.savefig('plots/04_sinistres_vs_primes.png', dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, '04_sinistres_vs_primes.png'), dpi=150)
     plt.close()
     print("✅ Plot 4 — Sinistres vs Primes généré.")
 
@@ -201,7 +222,7 @@ def plot_distribution_primes(df):
     ax.set_xlabel('Prime Nette (TND)')
     ax.set_ylabel('Nombre de Contrats')
     plt.tight_layout()
-    plt.savefig('plots/05_distribution_primes.png', dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, '05_distribution_primes.png'), dpi=150)
     plt.close()
     print("✅ Plot 5 — Distribution des Primes généré.")
 
@@ -217,7 +238,8 @@ def plot_profil_client(df):
     # --- Âge ---
     if 'DT_NAISS' in df.columns:
         df['DT_NAISS'] = pd.to_datetime(df['DT_NAISS'], errors='coerce')
-        df['AGE'] = 2025 - df['DT_NAISS'].dt.year
+        analyzed_year = df['DEBUT_PERI'].dt.year.dropna().iloc[0]
+        df['AGE'] = analyzed_year - df['DT_NAISS'].dt.year
         age_data = df['AGE'][(df['AGE'] >= 18) & (df['AGE'] <= 80)]
         axes[0].hist(age_data, bins=30, color=PASTEL_BLUE, edgecolor='white')
         axes[0].set_title('Distribution des Âges')
@@ -231,8 +253,8 @@ def plot_profil_client(df):
     # --- Sexe ---
     if 'SEXE' in df.columns:
         sexe = df['SEXE'].value_counts()
-        bars = axes[1].bar(sexe.index, sexe.values,
-                           color=[PASTEL_BLUE, PASTEL_PINK], edgecolor='white')
+        axes[1].bar(sexe.index, sexe.values,
+                    color=[PASTEL_BLUE, PASTEL_PINK], edgecolor='white')
         for i, (idx, val) in enumerate(sexe.items()):
             axes[1].text(i, val + sexe.max() * 0.02,
                          f'{val/sexe.sum()*100:.1f}%', ha='center', fontsize=11)
@@ -243,7 +265,7 @@ def plot_profil_client(df):
         axes[1].text(0.5, 0.5, 'SEXE\nnon disponible',
                      ha='center', va='center', transform=axes[1].transAxes)
 
-    # CSP contient directement les libellés après cleaning
+    # CSP
     if 'CSP' in df.columns:
         csp = df['CSP'].value_counts().head(6)
         axes[2].barh(csp.index, csp.values, color=PALETTE[:6], edgecolor='white')
@@ -255,7 +277,7 @@ def plot_profil_client(df):
                      ha='center', va='center', transform=axes[2].transAxes)
 
     plt.tight_layout()
-    plt.savefig('plots/06_profil_client.png', dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, '06_profil_client.png'), dpi=150)
     plt.close()
     print("✅ Plot 6 — Profil Client généré.")
 
@@ -265,6 +287,29 @@ def plot_profil_client(df):
 # =================================================================
 if __name__ == "__main__":
     print("🚀 Génération des analyses EDA — MAE Assurances 2025\n")
+    
+    # ÉTAPE SUPPLÉMENTAIRE : Force le nettoyage physique du dossier plots
+    # Cela force Windows à réinitialiser la "Date de création" et détruit le cache.
+    target_plots = [
+        '01_top_agences_ca.png',
+        '02_repartition_branche.png',
+        '03_tendance_temporelle.png',
+        '04_sinistres_vs_primes.png',
+        '05_distribution_primes.png',
+        '06_profil_client.png'
+    ]
+    
+    for plot_name in target_plots:
+        filepath = os.path.join(PLOTS_DIR, plot_name)
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+                print(f"🧹 Ancien plot supprimé du disque : {plot_name}")
+            except Exception as e:
+                print(f"⚠️  Impossible de supprimer {plot_name} (fichier peut-être verrouillé par Windows) : {e}")
+
+    print("") # Ligne vide pour la clarté
+
     df_prod, df_sini = load_data()
 
     if df_prod is not None:
