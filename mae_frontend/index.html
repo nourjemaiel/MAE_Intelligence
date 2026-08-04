@@ -1180,7 +1180,9 @@ function App() {
     setCurrentUser(user);
     // Load this user's persisted conversations
     setConversations(loadUserConversations(user.username));
-    setPage("dashboard");
+    // L'Administrateur gere les acces, il n'a pas de conversations agent ni
+    // de tableau de bord metier -- atterrit directement sur Administration.
+    setPage(user.role === "admin" ? "admin" : "dashboard");
   };
 
   const handleLogout = () => {
@@ -1217,14 +1219,19 @@ function App() {
 
   if (!currentUser) return <LoginPage onLogin={handleLogin}/>;
 
-  const NAV=[
-    {id:"dashboard",   icon:"📊",label:"Tableau de Bord"},
-    {id:"forecast",    icon:"🔮",label:"Prévisions 2026"},
-    {id:"segmentation",icon:"👥",label:"Segmentation"},
-    {id:"monitoring",  icon:"📡",label:"Monitoring"},
-    {id:"agent",       icon:"🤖",label:"Agent IA"},
-    ...(isAdmin ? [{id:"admin", icon:"⚙️", label:"Administration"}] : []),
-  ];
+  // Separation stricte des roles : l'Administrateur gere UNIQUEMENT les
+  // acces (principe du moindre privilege -- ce n'est pas un utilisateur
+  // metier), la Direction Generale voit tout le reste mais jamais
+  // Administration. Un seul compte ne voit jamais les deux univers.
+  const NAV = isAdmin
+    ? [{id:"admin", icon:"⚙️", label:"Administration"}]
+    : [
+        {id:"dashboard",   icon:"📊",label:"Tableau de Bord"},
+        {id:"forecast",    icon:"🔮",label:"Prévisions 2026"},
+        {id:"segmentation",icon:"👥",label:"Segmentation"},
+        {id:"monitoring",  icon:"📡",label:"Monitoring"},
+        {id:"agent",       icon:"🤖",label:"Agent IA"},
+      ];
 
   return (
     <div className="shell">
@@ -1241,7 +1248,7 @@ function App() {
               <span className="sb-icon">{n.icon}</span>{n.label}
             </button>
           ))}
-          {conversations.length>0&&(
+          {!isAdmin && conversations.length>0&&(
             <>
               <div className="sb-section" style={{marginTop:8}}>Conversations ({conversations.length})</div>
               <button className="new-chat-btn" onClick={()=>handleNewChat(null)}>
@@ -1258,7 +1265,7 @@ function App() {
               ))}
             </>
           )}
-          {conversations.length===0&&page==="agent"&&(
+          {!isAdmin && conversations.length===0&&page==="agent"&&(
             <>
               <div className="sb-section" style={{marginTop:8}}>Conversations</div>
               <button className="new-chat-btn" onClick={()=>handleNewChat(null)}>
@@ -1282,7 +1289,7 @@ function App() {
             {status?`Live · ${status.total_contrats?.toLocaleString()||0} contrats`:"Backend offline"}
           </div>
           {status&&<div style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginTop:4,fontFamily:"'JetBrains Mono',monospace"}}>+{status.total_generated||0} générés</div>}
-          {status?.drift_alert_active && (
+          {!isAdmin && status?.drift_alert_active && (
             <button onClick={()=>setPage("monitoring")} title="Voir le détail dans Monitoring"
               style={{display:"flex",alignItems:"center",gap:6,marginTop:8,padding:"6px 10px",
                 background:"rgba(217,48,37,0.18)",border:"1px solid rgba(217,48,37,0.4)",borderRadius:8,
@@ -1296,19 +1303,28 @@ function App() {
       </nav>
 
       <main className="main">
-        {page!=="agent"&&page!=="admin"&&page!=="monitoring"&&(
-          <Filters filters={filters} values={fVals}
-            onChange={(k,v)=>setFVals(p=>({...p,[k]:v}))}
-            onReset={()=>setFVals({agence:"all",region:"all",branche:"all",mois:0})}/>
+        {isAdmin ? (
+          // L'Administrateur ne voit QUE cette page -- jamais les pages
+          // metier, quelle que soit la valeur de `page` (defense en
+          // profondeur : meme si un bug remettait `page` a une valeur
+          // metier, cette branche ne rend jamais rien d'autre qu'AdminPage).
+          <AdminPage/>
+        ) : (
+          <>
+            {page!=="agent"&&page!=="monitoring"&&(
+              <Filters filters={filters} values={fVals}
+                onChange={(k,v)=>setFVals(p=>({...p,[k]:v}))}
+                onReset={()=>setFVals({agence:"all",region:"all",branche:"all",mois:0})}/>
+            )}
+            {page==="dashboard"    && <Dashboard filterVals={fVals} onFiltersLoaded={handleFiltersLoaded}/>}
+            {page==="forecast"     && <Forecast/>}
+            {page==="segmentation" && <Segmentation/>}
+            {page==="monitoring"   && <Monitoring/>}
+            {page==="agent"        && <Agent conversations={conversations} activeConvId={activeConvId}
+                onNewChat={handleNewChat} onSelectConv={id=>{setActiveConvId(id);setPage("agent");}}
+                onDeleteConv={handleDeleteConv} onUpdateConv={handleUpdateConv}/>}
+          </>
         )}
-        {page==="dashboard"    && <Dashboard filterVals={fVals} onFiltersLoaded={handleFiltersLoaded}/>}
-        {page==="forecast"     && <Forecast/>}
-        {page==="segmentation" && <Segmentation/>}
-        {page==="monitoring"   && <Monitoring/>}
-        {page==="agent"        && <Agent conversations={conversations} activeConvId={activeConvId}
-            onNewChat={handleNewChat} onSelectConv={id=>{setActiveConvId(id);setPage("agent");}}
-            onDeleteConv={handleDeleteConv} onUpdateConv={handleUpdateConv}/>}
-        {page==="admin" && isAdmin && <AdminPage/>}
       </main>
     </div>
   );
