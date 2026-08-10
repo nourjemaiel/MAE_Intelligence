@@ -654,6 +654,30 @@ TOOL_DEFS = [
 ]
 
 # ════════════════════════════════════════════════════════════════
+# MODE DEGRADE (v2.4) — utilise quand Groq reste indisponible apres tous
+# les retries de _call_groq_with_retry (panne prolongee, quota epuise...).
+# Routeur par MOTS-CLES (aucun appel LLM) vers un sous-ensemble des outils
+# qui ne prennent aucun parametre obligatoire -- objectif : renvoyer des
+# DONNEES REELLES plutot qu un message d erreur sec quand le service IA
+# est en panne, meme si la reponse n est pas une synthese en langage
+# naturel. Verifie dans l ordre ; le premier motif qui matche gagne.
+# Deliberement conservateur : si rien ne matche, on ne devine pas -- on
+# retourne None et l appelant renvoie l erreur classique.
+DEGRADED_MODE_ROUTES = [
+    (("prevision", "prévision", "2026", "croissance"),                    "forecast"),
+    (("sinistre", "sinistres"),                                           "sinistres_stats"),
+    (("anomalie", "anomalies", "aberrant"),                               "detect_anomalies"),
+    (("segment", "segmentation"),                                         "segments"),
+    (("risque", "risques"),                                               "risk_analysis"),
+    (("branche",),                                                        "branch_analysis"),
+    (("agence", "agences", "compar"),                                     "compare_agencies"),
+    (("client", "clients", "profil", "démographique", "demographique"),   "profil_clients"),
+    (("portefeuille", "chiffre d'affaires", "chiffre d affaires",
+      "ca total", "resume", "résumé"),                                    "portfolio_summary"),
+]
+
+
+# ════════════════════════════════════════════════════════════════
 # AGENT CLASS
 # ════════════════════════════════════════════════════════════════
 class MAEAgent:
@@ -722,6 +746,38 @@ class MAEAgent:
                     logging.error(f"Groq API error apres {MAX_GROQ_RETRIES + 1} tentatives: {e}")
         raise last_exception
 
+    def _degraded_mode_response(self, user_message: str):
+        """
+        Reponse de secours quand Groq reste indisponible apres tous les
+        retries (voir _call_groq_with_retry). Pas d IA ici : un routeur par
+        mots-cles (DEGRADED_MODE_ROUTES) appelle DIRECTEMENT l un des
+        outils sans parametre obligatoire et renvoie ses donnees brutes,
+        plutot que de laisser l utilisateur avec un message d erreur sec.
+        Beaucoup moins riche qu une vraie reponse de l agent (pas de
+        synthese, pas de recommandations), mais reste UTILE -- mieux
+        qu une panne totale du service.
+
+        Retourne (tool_name, result) si un mot-cle a matche ET que l outil
+        a repondu sans erreur, sinon None (aucune tentative de deviner
+        l intention si rien ne correspond).
+        """
+        lower = user_message.lower()
+        for keywords, tool_name in DEGRADED_MODE_ROUTES:
+            if not any(kw in lower for kw in keywords):
+                continue
+            fn = self.tools_map.get(tool_name)
+            if not fn:
+                continue
+            try:
+                result = fn()
+            except Exception as e:
+                logging.warning(f"Mode degrade: echec de l outil {tool_name} ({e})")
+                continue
+            if isinstance(result, dict) and "error" in result:
+                continue
+            return tool_name, result
+        return None
+
     def run(self, user_message: str, history: list = None) -> dict:
         if history is None:
             history = []
@@ -775,6 +831,25 @@ class MAEAgent:
                     response = self._call_groq_with_retry(messages)
                 except Exception as e:
                     logging.error(f"Groq API error (definitif apres retries): {e}")
+                    degraded = self._degraded_mode_response(user_message)
+                    if degraded:
+                        tool_name, result = degraded
+                        duration_ms = int((time.time() - start_time) * 1000)
+                        answer = (
+                            "⚠️ **Mode degrade** : le service IA (Groq) est temporairement "
+                            "indisponible, impossible de generer une reponse redigee. Voici "
+                            f"les donnees brutes les plus pertinentes trouvees pour votre "
+                            f"question (outil `{tool_name}`) :\n\n```json\n"
+                            f"{json.dumps(result, ensure_ascii=False, indent=2, default=str)}\n```"
+                        )
+                        logging.info(f"Mode degrade active -> {tool_name} (Groq indisponible)")
+                        return {
+                            "answer":      answer,
+                            "tool_calls":  [{"tool": tool_name, "inputs": {}, "result_summary": str(result)[:200]}],
+                            "thinking":    thinking_log + [f"[mode degrade] Groq indisponible, routage mots-cles -> {tool_name}"],
+                            "tokens_used": 0,
+                            "duration_ms": duration_ms,
+                        }
                     return self._error_response(str(e), tool_calls_log, thinking_log, start_time)
 
                 msg = response.choices[0].message
