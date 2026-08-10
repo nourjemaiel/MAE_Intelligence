@@ -654,7 +654,15 @@ def tool_top_agencies(n=5, agence=None, region=None, branche=None):
             for a, v in top.items()]
 
 
-_SEASONAL_RAW = [0.92,0.88,1.02,1.05,1.08,1.10,1.07,1.05,1.03,1.00,0.97,1.12]
+# Facteurs saisonniers derives du modele de regression saisonniere de
+# 04_forecasting.py (1 harmonique -- voir model_comparison.ipynb, section
+# tuning Optuna : la config a 2 harmoniques utilisee avant surapprenait le
+# bruit propre a 2025 sur seulement 12 points d'entrainement, verifie en
+# validation croisee leave-one-out). Extraits en detrendant le fit du
+# modele (coefficients sin/cos) sur processed_data/Production_Cleaned.csv,
+# puis normalises pour que leur moyenne annuelle soit exactement 1 -- a
+# regenerer si 04_forecasting.py est ré-entraine sur de nouvelles donnees.
+_SEASONAL_RAW = [1.0073,0.9833,0.9637,0.9539,0.9564,0.9706,0.9927,1.0167,1.0363,1.0461,1.0436,1.0294]
 _seasonal_avg = sum(_SEASONAL_RAW) / 12
 SEASONAL_NORM = [s / _seasonal_avg for s in _SEASONAL_RAW]
 MOIS_NOMS_LONGS = ["Janvier","Fevrier","Mars","Avril","Mai","Juin",

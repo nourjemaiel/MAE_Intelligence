@@ -59,8 +59,18 @@ def load_monthly_ca():
 
 
 # =================================================================
-# 2. FEATURES : tendance + saisonnalité sin/cos (2 harmoniques)
+# 2. FEATURES : tendance + saisonnalite sin/cos (1 harmonique)
 # =================================================================
+# CHANGEMENT (voir model_comparison.ipynb, section tuning Optuna) : ce
+# modele avait a l'origine 2 harmoniques (4 features saisonnieres + 1
+# tendance = 5 au total). Sur seulement 12 points d'entrainement (l'annee
+# 2025), un tuning Optuna evalue en validation croisee leave-one-out
+# (LOOCV -- pas en erreur intra-echantillon, qui favorise mecaniquement la
+# complexite sans garantir la generalisation) a montre qu'1 seule
+# harmonique generalise MIEUX : RMSE LOOCV ~1.00M TND contre ~1.74M TND
+# pour 2 harmoniques, soit ~43% d'erreur en moins hors-echantillon. La 2e
+# harmonique captait probablement du bruit propre a 2025 plutot qu'un
+# motif saisonnier reel. Feature set reduit a 3 (tendance + 1 harmonique).
 def make_features(ds_series, t_offset=0):
     t = np.arange(t_offset, t_offset + len(ds_series))
     month = ds_series.dt.month.values
@@ -68,8 +78,6 @@ def make_features(ds_series, t_offset=0):
         t,
         np.sin(2 * np.pi * month / 12),
         np.cos(2 * np.pi * month / 12),
-        np.sin(4 * np.pi * month / 12),
-        np.cos(4 * np.pi * month / 12),
     ])
     return X
 
