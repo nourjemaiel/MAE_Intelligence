@@ -387,7 +387,6 @@ Regles :
 - Structure ta reponse : Analyse -> Chiffres cles -> Recommandations
 - Les donnees sont mises a jour en temps reel toutes les 5 secondes
 - IMPORTANT FORMAT MONNAIE: Affiche TOUJOURS les montants en TND avec le format suivant: 1 234 567,89 TND (espace comme separateur de milliers, virgule pour les decimales). Exemple: 1 887 480,00 TND et NON pas 1887480 ou 1,887,480
-- Tu peux detecter des anomalies, comparer des agences, predire le CA, analyser les risques
 - Utilise l outil explain_forecast (plutot que forecast) quand l utilisateur demande d expliquer, justifier ou detailler le calcul d une prevision -- pas seulement le chiffre
 - Utilise l outil agent_monitoring quand l utilisateur demande la performance du systeme ou si les donnees derivent
 - Sois precis, concret et actionnable dans tes recommandations
@@ -456,7 +455,7 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "explain_forecast",
-            "description": "Decompose la prevision CA en ses composantes (base 2025 reelle, croissance annuelle +4.7%, facteur saisonnier du mois) pour EXPLIQUER pourquoi le chiffre predit est ce qu'il est, plutot que de renvoyer juste un nombre. Utilise cet outil quand l utilisateur demande d expliquer, justifier, detailler ou comprendre le calcul d une prevision (pas pour juste demander le chiffre — dans ce cas utilise forecast).",
+            "description": "Decompose la prevision CA (base 2025 x croissance x saisonnalite) pour EXPLIQUER le calcul plutot que de donner juste un chiffre. A utiliser si l utilisateur demande d expliquer/justifier/detailler une prevision -- sinon utiliser forecast.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -470,7 +469,7 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "agent_monitoring",
-            "description": "Statistiques de performance de l agent (latence moyenne, tokens consommes, taux d erreur, executions recentes via MLflow) et verification de derive des donnees (data drift) sur le flux temps reel du simulateur. Utilise cet outil quand l utilisateur demande le monitoring, la performance du systeme, ou si les donnees derivent.",
+            "description": "Performance de l agent (latence, tokens, taux d erreur via MLflow) et derive des donnees (data drift) du flux temps reel. A utiliser pour le monitoring/performance du systeme ou une eventuelle derive.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -485,14 +484,10 @@ TOOL_DEFS = [
         "function": {
             "name": "generate_report",
             "description": (
-                "Genere un rapport (PDF ou Excel) et le sauvegarde sur le serveur. Par defaut "
-                "(aucun parametre) genere le rapport PDF complet du portefeuille. Utilise agence/"
-                "region/branche/mois_num pour restreindre le rapport a un perimetre precis demande "
-                "par l utilisateur (ex: 'rapport pour l agence Sfax Ville', 'rapport de mars'), "
-                "sections pour ne generer que certaines parties (par exemple si l utilisateur "
-                "demande 'juste les previsions' ou 'juste l analyse de risque'), et format='excel' "
-                "si l utilisateur demande explicitement un export Excel/tableur/xlsx plutot qu un "
-                "PDF (par exemple pour filtrer ou pivoter les chiffres lui-meme)."
+                "Genere un rapport (PDF ou Excel). Sans parametre : PDF complet du portefeuille. "
+                "agence/region/branche/mois_num restreignent le perimetre (ex: 'rapport pour Sfax "
+                "Ville'). sections limite le contenu (ex: 'juste les previsions'). format='excel' "
+                "si demande explicitement (tableur/xlsx)."
             ),
             "parameters": {
                 "type": "object",
@@ -533,15 +528,11 @@ TOOL_DEFS = [
         "function": {
             "name": "risk_analysis",
             "description": (
-                "Analyse des risques du portefeuille : ratio sinistralite, clients a risque, "
-                "agences sous-performantes, recommandations prioritaires. agence/region/branche "
-                "filtrent le ratio de sinistralite et les agences sous-performantes (calcules en "
-                "direct sur les donnees), MAIS clients_a_risque et part_risque_pct restent "
-                "TOUJOURS globaux (issus de la segmentation K-Means, pas recalculables par filtre) "
-                "-- si l utilisateur demande les clients a risque pour une agence/region precise, "
-                "precise-lui clairement que ce chiffre est celui du portefeuille entier, pas filtre. "
-                "Pour une LISTE nominative de clients (identifiants concrets), utilise l outil "
-                "risk_clients a la place."
+                "Risques du portefeuille : ratio sinistralite, clients a risque, agences "
+                "sous-performantes, recommandations. agence/region/branche filtrent le ratio et "
+                "les agences sous-performantes, MAIS clients_a_risque/part_risque_pct restent "
+                "TOUJOURS globaux (K-Means, non filtrable) -- le signaler si l utilisateur filtre "
+                "par agence/region. Pour une LISTE nominative de clients, utiliser risk_clients."
             ),
             "parameters": {
                 "type": "object",
@@ -641,7 +632,7 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "consulter_documents_metier",
-            "description": "Recherche semantique (RAG) dans les documents metier MAE : conditions generales (garanties, franchise, bonus-malus, delais de declaration, exclusions), grille tarifaire par branche, circulaire de segmentation clients, glossaire des statuts de sinistre. Utilise cet outil pour toute question sur le FONCTIONNEMENT du metier assurance, pas pour des chiffres du portefeuille.",
+            "description": "Recherche semantique (RAG) dans les documents MAE : conditions generales, grille tarifaire, circulaire de segmentation, glossaire des sinistres. Pour toute question sur le FONCTIONNEMENT du metier assurance (garanties, franchise, bonus-malus, delais...), pas pour des chiffres du portefeuille.",
             "parameters": {
                 "type": "object",
                 "properties": {
