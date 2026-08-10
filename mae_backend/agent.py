@@ -344,11 +344,20 @@ def _truncate_tool_result(result, max_chars: int = TOOL_RESULT_MAX_CHARS) -> str
                 break
             kept.append(item)
             running_len += len(item_json) + 1
-        truncated = json.dumps(kept, ensure_ascii=False, default=str)
-        return (
-            truncated[:-1]
-            + f', "...tronque, {len(result) - len(kept)} element(s) omis sur {len(result)} au total"]'
-        )
+        omitted_note = f'"...tronque, {len(result) - len(kept)} element(s) omis sur {len(result)} au total"'
+        if kept:
+            truncated = json.dumps(kept, ensure_ascii=False, default=str)
+            return truncated[:-1] + f", {omitted_note}]"
+        # BUG CORRIGE : si aucun element n entre dans le budget (ex: un seul
+        # extrait RAG de ~700 caracteres depasse deja la limite recursive
+        # allouee par la branche dict ci-dessous), l ancien code faisait
+        # "[]"[:-1] + ", ...]" = "[, ...]" -- JSON invalide (virgule juste
+        # apres le crochet ouvrant), qui plantait json.loads() en aval des
+        # que consulter_documents_metier renvoyait ne serait-ce qu un seul
+        # resultat volumineux. Jamais declenche avant le fix du renommage
+        # search_ -> consulter_ (l outil RAG echouait quasi systematiquement
+        # avant, donc ce chemin de code n etait quasiment jamais atteint).
+        return f"[{omitted_note}]"
 
     if isinstance(result, dict):
         # Cas frequent : un dict avec une cle contenant une longue liste
