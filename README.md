@@ -77,6 +77,27 @@ pytest test_main.py -v
 Une GitHub Action (`.github/workflows/tests.yml`) lance cette meme suite a
 chaque push/PR sur `master`.
 
+## Évaluation de l'agent
+
+```bash
+cd mae_backend
+python eval_agent.py                 # les ~32 questions du jeu d'évaluation
+python eval_agent.py --limit 5       # sous-ensemble rapide
+python eval_agent.py --category rag  # une seule catégorie
+```
+
+Exécute un jeu de questions types contre l'agent réel (vrais appels Groq)
+et mesure deux choses objectivement plutôt qu'à l'œil : la précision du
+choix d'outil (l'agent appelle-t-il le bon outil pour chaque question ?)
+et un taux de hallucination proxy (chaque nombre de la réponse finale
+est-il retrouvable dans un résultat d'outil réellement reçu ?). Un rapport
+JSON détaillé est sauvegardé dans `mae_backend/eval_results/` à chaque
+exécution. **Attention au coût en tokens** : chaque question consomme un
+vrai appel Groq (système prompt + 15 schémas d'outils) — sur le quota
+gratuit (100 000 tokens/jour), lancer le jeu complet représente une
+fraction significative du quota quotidien ; utiliser `--limit`/`--category`
+si le quota est déjà entamé par d'autres tests.
+
 ## MLOps & observabilité
 
 - Chaque exécution du pipeline et chaque interaction de l'agent est
@@ -84,6 +105,11 @@ chaque push/PR sur `master`.
 - La dérive des données est surveillée en continu (pas seulement à la
   demande), journalisée dans `mae_backend/logs/agent.log`, et visible en
   permanence dans la barre latérale du dashboard + la page **Monitoring**.
+- **Mode dégradé** : si Groq reste indisponible après tous les essais
+  (panne, quota épuisé), l'agent route la question vers l'un des outils
+  sans passer par le LLM (table de mots-clés, voir `DEGRADED_MODE_ROUTES`
+  dans `agent.py`) et renvoie les données réelles avec un avertissement
+  explicite, plutôt qu'un message d'erreur sec.
 
 ## À savoir avant d'évaluer ce projet
 
@@ -108,6 +134,7 @@ mae_backend/
   agent.py              Agent MAEIA (ReAct + Groq + RAG + mémoire long terme)
   business_docs/        Documents métier indexés pour le RAG
   test_main.py           Tests unitaires (pytest)
+  eval_agent.py          Harnais d'évaluation de l'agent (précision outils, hallucination)
 mae_frontend/
   index.html             Dashboard React (fichier unique, sans build)
 raw_data/, processed_data/, outputs/, plots/, reports/
