@@ -1,0 +1,35 @@
+name: Tests
+
+# Lance la suite pytest de mae_backend/ a chaque push/PR. N'a besoin d'aucun
+# secret (GROQ_API_KEY n'est requis qu'a l'instanciation de MAEAgent, jamais
+# a l'import de main.py/agent.py -- voir test_main.py) ; RAG/PDF sont
+# volontairement absents de mae_backend/requirements.txt (voir ce fichier)
+# donc le code degrade proprement (RAG_AVAILABLE=False) au lieu d'echouer.
+"on":
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mae_backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: mae_backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: pytest test_main.py -v

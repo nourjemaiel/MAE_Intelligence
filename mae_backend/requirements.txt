@@ -9,9 +9,9 @@
 # transformers tirent torch (~1-2 Go), un cout disproportionne pour ce que
 # ca apporte ici. Le code degrade deja proprement sans eux (RAG_AVAILABLE=
 # False, REPORT_AVAILABLE=False -- voir agent.py/main.py) : l'API tourne
-# normalement, seuls search_documents_metier et generate_report repondent
-# "indisponible". Pour les inclure, decommenter les 3 lignes en bas de ce
-# fichier.
+# normalement, seuls consulter_documents_metier et generate_report(format=
+# "pdf") repondent "indisponible". Pour les inclure, decommenter les lignes
+# en bas de ce fichier.
 
 fastapi==0.123.9
 uvicorn==0.38.0
@@ -26,10 +26,13 @@ mlflow==3.7.0
 # "pip download --platform manylinux2014_x86_64 --python-version 3.11".
 pydantic==2.11.5
 groq==1.2.0
+openpyxl==3.1.5  # export Excel des rapports (leger, moteur pandas.to_excel)
 
 # --- Optionnel : PDF (leger, pas de dependance lourde) ---
 reportlab>=4.0,<5.0
 
-# --- Optionnel : RAG (LOURD, ~1-2 Go avec torch) ---
-# chromadb>=0.5,<0.6
-# sentence-transformers>=3.0,<4.0
+# --- Optionnel : RAG (LOURD, ~1-2 Go avec torch) -- versions verifiees
+# fonctionnelles avec Llama 3.3 70B/Groq au 2026-08 : chromadb 1.5.9,
+# sentence-transformers 5.7.0. ---
+# chromadb>=1.5,<2.0
+# sentence-transformers>=5.0,<6.0

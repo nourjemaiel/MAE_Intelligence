@@ -14,7 +14,7 @@ Changelog v2 (2026-07) — Memoire + RAG :
 - RAG METIER (ChromaDB, collection "documents_metier") : ingestion des
   documents dans business_docs/ (conditions generales, grille tarifaire,
   circulaire segmentation, glossaire sinistres). Nouvel outil
-  search_documents_metier(query) que l'agent peut appeler comme n'importe
+  consulter_documents_metier(query) que l'agent peut appeler comme n'importe
   quel autre outil.
   IMPORTANT : ces documents sont ILLUSTRATIFS, rediges pour ce PFE car
   aucun document officiel MAE n'a ete fourni — voir l'entete de chaque
@@ -32,7 +32,7 @@ Changelog v2.1 (2026-07, fix demarrage) :
   y compris le dashboard/previsions/segmentation qui n'ont rien a voir
   avec le RAG. L'init ChromaDB/embeddings est desormais dans un
   try/except : si ca echoue, RAG_AVAILABLE=False, le serveur demarre quand
-  meme, et search_documents_metier() repond poliment "indisponible" au
+  meme, et consulter_documents_metier() repond poliment "indisponible" au
   lieu de faire planter l'API. Idem pour la memoire long terme (memes
   collections/embedding function).
 
@@ -46,7 +46,7 @@ Changelog v2.2 (2026-07, optimisations agent) :
   latences ponctuelles.
 - TRONCATURE des resultats d'outils avant injection dans l'historique de
   conversation : certains outils (compare_agencies, detect_anomalies,
-  search_documents_metier) peuvent renvoyer des payloads JSON volumineux.
+  consulter_documents_metier) peuvent renvoyer des payloads JSON volumineux.
   Comme CHAQUE resultat d'outil est renvoye au modele ET reste dans
   l'historique pour les tours suivants, ces payloads s'accumulent et
   gonflent le cout en tokens de la conversation. _truncate_tool_result()
@@ -109,7 +109,7 @@ TOOL_RESULT_MAX_CHARS = 1800  # taille max (en caracteres JSON) d'un resultat d'
 # installe, dependance manquante, souci reseau au premier telechargement
 # du modele...), RAG_AVAILABLE reste False et le reste de l'agent
 # continue de fonctionner normalement (tool calling metier, previsions,
-# etc.) — seul search_documents_metier() et la memoire long terme sont
+# etc.) — seul consulter_documents_metier() et la memoire long terme sont
 # desactives, avec un message clair au lieu d'un crash total du serveur.
 CHROMA_DIR         = "chroma_db"
 BUSINESS_DOCS_DIR  = "business_docs"
@@ -210,13 +210,39 @@ def ensure_documents_ingested():
         print(f"✅ RAG: {len(docs)} chunks ingeres depuis {len(filepaths)} documents metier.")
 
 
-def search_documents_metier(query: str, n_results: int = 3):
+_SOURCE_LABELS = {
+    "conditions_generales_extrait.md": "les Conditions Générales",
+    "grille_tarifaire.md":             "la Grille Tarifaire",
+    "circulaire_segmentation.md":      "la Circulaire de Segmentation",
+    "glossaire_sinistres.md":          "le Glossaire des Sinistres",
+}
+
+
+def consulter_documents_metier(query: str, n_results: int = 3):
     """
     Outil RAG : recherche semantique dans les documents metier MAE
     (conditions generales, grille tarifaire, circulaire segmentation,
     glossaire sinistres). A utiliser pour toute question sur le
     fonctionnement du metier assurance, PAS pour des chiffres du
     portefeuille (utiliser les autres outils pour cela).
+
+    NOM DELIBEREMENT PAS "search_..." : cet outil s'appelait a l'origine
+    search_documents_metier, et Llama 3.3 70B (via Groq) echouait
+    SYSTEMATIQUEMENT a l'appeler -- le modele emettait sa propre syntaxe
+    interne de tool calling (<function=nom{args}</function>, un format
+    "brave_search"-like herite de son entrainement sur des outils integres
+    nommes search_*) au lieu du format JSON structure attendu par l'API,
+    ce qui faisait echouer l'appel avec une erreur 400 "tool_use_failed".
+    Renommer l'outil (prefixe "search_" -> "consulter_") a immediatement
+    resolu le probleme (verifie empiriquement, appel identique sinon).
+    A NE PAS renommer a nouveau avec un prefixe search_/find_/lookup_ sans
+    retester, sous peine de reintroduire ce bug silencieusement.
+
+    Chaque resultat inclut "source_label" (nom lisible du document, ex.
+    "la Grille Tarifaire") en plus de "source" (nom de fichier brut) --
+    le system prompt demande au modele de citer ce label explicitement
+    dans sa reponse plutot que de paraphraser l'information sans indiquer
+    d'ou elle vient.
     """
     if not RAG_AVAILABLE:
         return {
@@ -233,10 +259,12 @@ def search_documents_metier(query: str, n_results: int = 3):
         metas_list = res.get("metadatas", [[]])[0]
         dists_list = res.get("distances", [[]])[0] if res.get("distances") else [None] * len(docs_list)
         for doc, meta, dist in zip(docs_list, metas_list, dists_list):
+            source = meta.get("source", "inconnu")
             resultats.append({
-                "source":    meta.get("source", "inconnu"),
-                "extrait":   doc,
-                "pertinence": round(1 - dist, 3) if dist is not None else None,
+                "source":       source,
+                "source_label": _SOURCE_LABELS.get(source, source),
+                "extrait":      doc,
+                "pertinence":   round(1 - dist, 3) if dist is not None else None,
             })
         return {"resultats": resultats}
     except Exception as e:
@@ -351,8 +379,10 @@ Tu analyses en temps reel le portefeuille d assurance auto pour la direction gen
 Regles :
 - Reponds TOUJOURS en francais, ton professionnel et analytique
 - Utilise TOUJOURS les outils pour acceder aux donnees reelles AVANT de repondre
-- Pour toute question sur le FONCTIONNEMENT du metier assurance (garanties, franchise, bonus-malus, tarification, delais de declaration, statuts de sinistre...), utilise l outil search_documents_metier plutot que de deviner
+- Pour toute question sur le FONCTIONNEMENT du metier assurance (garanties, franchise, bonus-malus, tarification, delais de declaration, statuts de sinistre...), utilise l outil consulter_documents_metier plutot que de deviner
+- Quand tu t appuies sur un resultat de consulter_documents_metier, cite TOUJOURS explicitement le document source dans ta reponse (utilise le champ source_label, ex: "Selon la Grille Tarifaire, ..." ou "D apres le Glossaire des Sinistres, ...") -- ne te contente jamais de paraphraser l information sans indiquer d ou elle vient
 - Ne devine jamais des chiffres — utilise toujours un outil
+- Si un resultat d outil contient une cle "error", NE fabrique JAMAIS une reponse plausible a la place -- dis clairement a l utilisateur que cette donnee n a pas pu etre recuperee (sans forcement entrer dans le detail technique de l erreur) et propose de reformuler ou reessayer
 - Si plusieurs outils sont pertinents, appelle-les tous avant de synthetiser
 - Structure ta reponse : Analyse -> Chiffres cles -> Recommandations
 - Les donnees sont mises a jour en temps reel toutes les 5 secondes
@@ -363,7 +393,7 @@ Regles :
 - Sois precis, concret et actionnable dans tes recommandations
 - Si un contexte "Analyses passees pertinentes" t est fourni, appuie-toi dessus pour assurer la coherence avec tes reponses precedentes, mais ne le mentionne explicitement que si c est utile a la reponse
 - Si un resultat d outil contient une marque "tronque", precise a l utilisateur que seule une partie des resultats a ete analysee et propose d affiner la question si besoin (par exemple filtrer par agence ou par periode)
-- Si search_documents_metier retourne "indisponible", explique brievement a l utilisateur que la recherche documentaire n est pas active sur cet environnement, sans entrer dans les details techniques
+- Si consulter_documents_metier retourne "indisponible", explique brievement a l utilisateur que la recherche documentaire n est pas active sur cet environnement, sans entrer dans les details techniques
 - Utilise l outil generate_report quand l utilisateur demande un rapport PDF, un document, ou un export du portefeuille
 - Quand l utilisateur precise une portee pour un rapport (une agence, une region, une branche, un mois, ou seulement certaines parties comme "juste les previsions" ou "juste l analyse de risque"), passe les parametres correspondants (agence/region/branche/mois_num/sections) a generate_report au lieu de generer systematiquement le rapport complet
 - ATTENTION : clients_a_risque et part_risque_pct (dans risk_analysis et dans les rapports generes) sont TOUJOURS des chiffres du portefeuille entier, meme quand un filtre agence/region/branche est applique ailleurs dans la reponse -- ne jamais laisser entendre que ces deux chiffres precis sont filtres sur le perimetre demande
@@ -455,12 +485,14 @@ TOOL_DEFS = [
         "function": {
             "name": "generate_report",
             "description": (
-                "Genere un rapport PDF et le sauvegarde sur le serveur. Par defaut (aucun "
-                "parametre) genere le rapport complet du portefeuille. Utilise agence/region/"
-                "branche/mois_num pour restreindre le rapport a un perimetre precis demande par "
-                "l utilisateur (ex: 'rapport pour l agence Sfax Ville', 'rapport de mars'), et "
+                "Genere un rapport (PDF ou Excel) et le sauvegarde sur le serveur. Par defaut "
+                "(aucun parametre) genere le rapport PDF complet du portefeuille. Utilise agence/"
+                "region/branche/mois_num pour restreindre le rapport a un perimetre precis demande "
+                "par l utilisateur (ex: 'rapport pour l agence Sfax Ville', 'rapport de mars'), "
                 "sections pour ne generer que certaines parties (par exemple si l utilisateur "
-                "demande 'juste les previsions' ou 'juste l analyse de risque')."
+                "demande 'juste les previsions' ou 'juste l analyse de risque'), et format='excel' "
+                "si l utilisateur demande explicitement un export Excel/tableur/xlsx plutot qu un "
+                "PDF (par exemple pour filtrer ou pivoter les chiffres lui-meme)."
             ),
             "parameters": {
                 "type": "object",
@@ -473,6 +505,11 @@ TOOL_DEFS = [
                         "type": "array",
                         "items": {"type": "string", "enum": ["resume", "agences", "previsions", "risques"]},
                         "description": "Sous-ensemble de sections a inclure dans le rapport (omis ou vide = rapport complet avec toutes les sections)",
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["pdf", "excel"],
+                        "description": "Format de sortie : 'pdf' (defaut) ou 'excel' si l utilisateur le demande explicitement",
                     },
                 },
                 "required": []
@@ -603,7 +640,7 @@ TOOL_DEFS = [
     {
         "type": "function",
         "function": {
-            "name": "search_documents_metier",
+            "name": "consulter_documents_metier",
             "description": "Recherche semantique (RAG) dans les documents metier MAE : conditions generales (garanties, franchise, bonus-malus, delais de declaration, exclusions), grille tarifaire par branche, circulaire de segmentation clients, glossaire des statuts de sinistre. Utilise cet outil pour toute question sur le FONCTIONNEMENT du metier assurance, pas pour des chiffres du portefeuille.",
             "parameters": {
                 "type": "object",
@@ -623,7 +660,7 @@ class MAEAgent:
     """
     Agent ReAct pour la MAE — Groq + Llama 3.3 70B.
     tools_map injecte depuis main.py (pas d import circulaire).
-    Le tool RAG (search_documents_metier) et la memoire long terme sont
+    Le tool RAG (consulter_documents_metier) et la memoire long terme sont
     geres directement ici, independamment de main.py. Ils degradent
     gracieusement (voir RAG_AVAILABLE plus haut) si l environnement ne
     peut pas les supporter — l agent reste utilisable pour tous les
@@ -636,7 +673,7 @@ class MAEAgent:
         # present (meme si RAG_AVAILABLE=False) : il repond juste
         # "indisponible" au lieu de ne pas exister, ce qui evite un
         # "outil inconnu" cote agent si le modele essaie de l appeler.
-        self.tools_map = {**tools_map, "search_documents_metier": search_documents_metier}
+        self.tools_map = {**tools_map, "consulter_documents_metier": consulter_documents_metier}
 
         api_key = os.environ.get("GROQ_API_KEY", "")
         if not api_key:
@@ -812,6 +849,12 @@ class MAEAgent:
                     try:
                         tool_inputs = json.loads(tc.function.arguments or "{}")
                     except json.JSONDecodeError:
+                        tool_inputs = {}
+                    # Certains appels sans argument renvoient litteralement "null"
+                    # (donc json.loads -> None) plutot que "{}" -- fn(**None)
+                    # levait un TypeError, et le modele fabriquait ensuite une
+                    # reponse plutot que d admettre l echec de l outil.
+                    if tool_inputs is None:
                         tool_inputs = {}
 
                     thinking_log.append(

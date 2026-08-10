@@ -18,6 +18,8 @@ Pipeline de données  →  API + Agent (mae_backend/)  →  Dashboard (mae_front
 - **Backend** (`mae_backend/`) : API FastAPI qui simule un flux temps réel
   (nouveau contrat toutes les 5s) et expose 15 outils analytiques, utilisés
   à la fois par le dashboard et par l'agent `MAEIA` (Llama 3.3 70B via Groq).
+  Les rapports sont exportables en PDF ou en Excel (`generate_report`,
+  paramètre `format`).
 - **Frontend** (`mae_frontend/index.html`) : React + Recharts en un seul
   fichier HTML, aucune étape de build.
 
@@ -71,6 +73,9 @@ plutôt que d'éditer le fichier.
 cd mae_backend
 pytest test_main.py -v
 ```
+
+Une GitHub Action (`.github/workflows/tests.yml`) lance cette meme suite a
+chaque push/PR sur `master`.
 
 ## MLOps & observabilité
 

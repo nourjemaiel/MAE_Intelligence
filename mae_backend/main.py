@@ -1042,6 +1042,16 @@ try:
 except Exception as e:
     print(f"⚠️  Generation de rapport PDF indisponible — {type(e).__name__}: {e} (pip install reportlab)")
 
+# EXCEL_AVAILABLE : meme pattern defensif, pour l'export .xlsx (openpyxl est
+# une dependance beaucoup plus legere que reportlab -- pas de raison que
+# l'un bloque l'autre si un seul des deux est installe).
+EXCEL_AVAILABLE = False
+try:
+    import openpyxl  # noqa: F401  (juste pour verifier la presence du moteur pandas.to_excel)
+    EXCEL_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️  Export Excel indisponible — {type(e).__name__}: {e} (pip install openpyxl)")
+
 # v3.3 — FIX : ancre sur le dossier de ce fichier, pas sur le cwd du
 # process qui lance uvicorn (voir changelog en tete de fichier).
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
@@ -1058,14 +1068,14 @@ def _fmt_tnd_fr(v):
         return str(v)
 
 
-def tool_generate_report(agence=None, region=None, branche=None, mois_num=None, sections=None):
+def tool_generate_report(agence=None, region=None, branche=None, mois_num=None, sections=None, format="pdf"):
     """
-    Genere un rapport PDF du portefeuille et le sauvegarde dans
-    REPORTS_DIR. Retourne les metadonnees du fichier (pas le PDF lui-meme
-    — l'agent ne peut pas streamer un binaire dans le chat) ; le
+    Genere un rapport du portefeuille (PDF ou Excel) et le sauvegarde dans
+    REPORTS_DIR. Retourne les metadonnees du fichier (pas le fichier
+    lui-meme — l'agent ne peut pas streamer un binaire dans le chat) ; le
     telechargement se fait via l'URL absolue retournee (download_url).
 
-    Parametres (v3.3, tous optionnels) :
+    Parametres (tous optionnels) :
       - agence/region/branche : restreint le resume et le classement des
         agences a ce perimetre (via tool_portfolio_summary). NOTE : les
         previsions et l'analyse de risque restent globales quel que soit
@@ -1074,6 +1084,9 @@ def tool_generate_report(agence=None, region=None, branche=None, mois_num=None, 
         du detail sur 12 mois.
       - sections : sous-ensemble de ["resume","agences","previsions","risques"].
         None/vide => rapport complet (comportement identique a avant).
+      - format : "pdf" (defaut) ou "excel"/"xlsx" -- meme donnees, format de
+        sortie different. Excel est utile quand l'utilisateur veut filtrer/
+        pivoter les chiffres lui-meme plutot que lire un document mis en page.
 
     LIMITATION CONNUE : tool_risk_analysis() et tool_top_agencies() ne
     prennent pas de filtre agence/region/branche cote donnees — un rapport
@@ -1081,9 +1094,16 @@ def tool_generate_report(agence=None, region=None, branche=None, mois_num=None, 
     mais la section risques restera basee sur les chiffres globaux du
     portefeuille. A corriger si un jury teste specifiquement ce cas.
     """
+    fmt = (format or "pdf").strip().lower()
+    if fmt in ("xlsx", "excel", "xls"):
+        return _generate_excel_report(agence, region, branche, mois_num, sections)
+    return _generate_pdf_report(agence, region, branche, mois_num, sections)
+
+
+def _generate_pdf_report(agence, region, branche, mois_num, sections):
     if not REPORT_AVAILABLE:
         return {
-            "error": "Generation de rapport indisponible sur cet environnement "
+            "error": "Generation de rapport PDF indisponible sur cet environnement "
                      "(reportlab non installe — pip install reportlab)."
         }
 
@@ -1217,6 +1237,80 @@ def tool_generate_report(agence=None, region=None, branche=None, mois_num=None, 
         "download_url": f"{API_BASE_URL}/api/reports/{filename}",
         "message": f"Rapport PDF genere avec succes : {filename}. "
                     f"Telechargement disponible via /api/generate-report.",
+    }
+
+
+def _generate_excel_report(agence, region, branche, mois_num, sections):
+    """
+    Meme donnees que _generate_pdf_report (une feuille Excel par section au
+    lieu d'un document mis en page) -- pour les utilisateurs qui veulent
+    filtrer/pivoter les chiffres eux-memes plutot que lire un PDF statique.
+    """
+    if not EXCEL_AVAILABLE:
+        return {
+            "error": "Export Excel indisponible sur cet environnement "
+                     "(openpyxl non installe — pip install openpyxl)."
+        }
+
+    valid_sections = {"resume", "agences", "previsions", "risques"}
+    if not sections:
+        sections = list(valid_sections)
+    else:
+        sections = [s for s in sections if s in valid_sections] or list(valid_sections)
+
+    summary = tool_portfolio_summary(agence, region, branche)
+    top_ag  = tool_top_agencies(5, agence, region, branche)
+    fc      = tool_forecast(mois_num) if mois_num else tool_forecast()
+    risk    = tool_risk_analysis(agence, region, branche)
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"rapport_MAE_{ts}.xlsx"
+    filepath = os.path.join(REPORTS_DIR, filename)
+
+    with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+        if "resume" in sections:
+            pd.DataFrame([
+                {"Indicateur": "CA total (TND)",           "Valeur": summary["ca_total"]},
+                {"Indicateur": "Nombre de contrats",        "Valeur": summary["nb_contrats"]},
+                {"Indicateur": "Sinistres totaux (TND)",    "Valeur": summary["sinistres_total"]},
+                {"Indicateur": "Ratio de sinistralite (%)", "Valeur": summary["ratio_sinistralite"]},
+                {"Indicateur": "Agence top",                "Valeur": summary["top_agence"]},
+            ]).to_excel(writer, sheet_name="Resume", index=False)
+
+        if "agences" in sections:
+            pd.DataFrame(top_ag).rename(columns={
+                "agence": "Agence", "ca": "CA (TND)", "part_pct": "Part de marche (%)",
+            }).to_excel(writer, sheet_name="Agences", index=False)
+
+        if "previsions" in sections:
+            if mois_num:
+                pd.DataFrame([{
+                    "Mois": fc["mois"], "CA prevu (TND)": fc["ca_prev"],
+                    "Borne basse (TND)": fc["ci_low"], "Borne haute (TND)": fc["ci_high"],
+                    "Intervalle (%)": fc["ci_width_pct"],
+                }]).to_excel(writer, sheet_name="Previsions", index=False)
+            else:
+                pd.DataFrame(fc["detail"]).rename(columns={
+                    "mois": "Mois", "ca": "CA prevu (TND)", "ci_width_pct": "Intervalle (%)",
+                }).to_excel(writer, sheet_name="Previsions", index=False)
+
+        if "risques" in sections:
+            risk_rows = [
+                {"Indicateur": "Ratio de sinistralite (%)",                   "Valeur": risk["ratio_sinistralite"]},
+                {"Indicateur": "Clients a risque (portefeuille entier)",      "Valeur": risk["clients_a_risque"]},
+                {"Indicateur": "Part du portefeuille a risque (%)",           "Valeur": risk["part_risque_pct"]},
+            ] + [
+                {"Indicateur": f"Recommandation {i+1}", "Valeur": reco}
+                for i, reco in enumerate(risk["recommandations"])
+            ]
+            pd.DataFrame(risk_rows).to_excel(writer, sheet_name="Risques", index=False)
+
+    return {
+        "filename": filename,
+        "filepath": filepath,
+        "download_url": f"{API_BASE_URL}/api/reports/{filename}",
+        "message": f"Export Excel genere avec succes : {filename}. "
+                    f"Telechargement disponible via le lien fourni.",
     }
 
 
@@ -1377,13 +1471,14 @@ def monitoring_endpoint(n_runs: int = 50):
 
 
 @app.get("/api/generate-report")
-def generate_report_endpoint():
-    result = tool_generate_report()
+def generate_report_endpoint(format: str = "pdf"):
+    result = tool_generate_report(format=format)
     if "error" in result:
         return result
+    ext = os.path.splitext(result["filename"])[1].lower()
     return FileResponse(
         path=result["filepath"],
-        media_type="application/pdf",
+        media_type=_REPORT_MEDIA_TYPES.get(ext, "application/octet-stream"),
         filename=result["filename"],
     )
 
@@ -1469,14 +1564,21 @@ class ChatRequest(BaseModel):
     message: str
     history: list = []
 
+_REPORT_MEDIA_TYPES = {
+    ".pdf":  "application/pdf",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+
 @app.get("/api/reports/{filename}")
 def download_report(filename: str):
     # Securite : empeche toute tentative de path traversal (../../etc)
     safe_name = os.path.basename(filename)
     filepath = os.path.join(REPORTS_DIR, safe_name)
-    if not os.path.isfile(filepath) or not safe_name.endswith(".pdf"):
+    ext = os.path.splitext(safe_name)[1].lower()
+    if not os.path.isfile(filepath) or ext not in _REPORT_MEDIA_TYPES:
         raise HTTPException(status_code=404, detail="Rapport introuvable.")
-    return FileResponse(path=filepath, media_type="application/pdf", filename=safe_name)
+    return FileResponse(path=filepath, media_type=_REPORT_MEDIA_TYPES[ext], filename=safe_name)
 
 
 @app.post("/api/agent")
