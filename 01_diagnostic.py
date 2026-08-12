@@ -39,12 +39,21 @@ def run_diagnostic(file_path, report_name):
         if 'CAPITAUX' in df.columns:
             df['CAPITAUX'] = pd.to_numeric(df['CAPITAUX'].astype(str).str.replace(',', '.'), errors='coerce')
 
+        # BONUS_MALUS est un coefficient de risque ORDINAL/NUMERIQUE (traite
+        # comme numerique partout ailleurs dans le pipeline -- BONUS_MALUS_MOY
+        # dans 05_clustering.py), pas une categorie nominale. Le forcer en
+        # string ici l'excluait silencieusement de la matrice de correlation
+        # et du profil numerique ydata-profiling -- corrige : converti en
+        # numerique comme CAPITAUX, retire de cols_categoriques ci-dessous.
+        if 'BONUS_MALUS' in df.columns:
+            df['BONUS_MALUS'] = pd.to_numeric(df['BONUS_MALUS'], errors='coerce')
+
         cols_dates = ['DEBUT_PERI', 'FIN_PERIOD', 'DT_NAISS', 'DATE_ACCIDENT']
         for col in cols_dates:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
 
-        cols_categoriques = ['N_POLICE', 'N_CLIENT', 'C_GARA', 'Region', 'N_BRA', 'AGENCE', 'BONUS_MALUS', 'SEXE']
+        cols_categoriques = ['N_POLICE', 'N_CLIENT', 'C_GARA', 'Region', 'N_BRA', 'AGENCE', 'SEXE']
         for col in cols_categoriques:
             if col in df.columns:
                 df[col] = df[col].astype(str)
