@@ -137,6 +137,24 @@ def clean_augment_shift(file_path, output_name):
                     df[col] = df[col].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
 
             # ----------------------------------------------------------------
+            # 4-6. DECODAGE N_BRA / AGENCE / Region → libelles lisibles
+            # ----------------------------------------------------------------
+            # POURQUOI decoder ici plutot que de garder les codes bruts :
+            # ces libelles servent la couche presentation/interaction (filtres
+            # et graphes du dashboard, filtres en langage naturel de l agent —
+            # ex. "genere un rapport pour Sfax Ville"), PAS l entrainement des
+            # modeles. Verifie explicitement : 04_forecasting.py n utilise que
+            # PRIME_NETTE + DEBUT_PERI (aucune reference a AGENCE/BRANCHE/
+            # Region) ; 05_clustering.py ne les inclut pas non plus dans sa
+            # liste features (NB_CONTRATS, CA_TOTAL, PRIME_MOYENNE,
+            # BONUS_MALUS_MOY, AGE, DUREE_MOY, SEXE_NUM). Donc pas de conflit
+            # avec le besoin d un modele en valeurs numeriques : si un futur
+            # modele doit un jour utiliser branche/agence/region comme
+            # predicteur, on ré-encode a ce moment-la (one-hot/label encoding)
+            # a partir du libelle -- decoder une fois pour l humain puis
+            # ré-encoder plus tard pour un modele specifique est une pratique
+            # standard, pas une contradiction.
+            #
             # 4. MAPPING N_BRA → libellé (remplace la colonne en place)
             # ----------------------------------------------------------------
             if 'N_BRA' in df.columns:
