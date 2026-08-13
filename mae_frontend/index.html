@@ -602,6 +602,7 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
     {label:"Chiffre d'Affaires",val:fmtTND(kpis.ca_total),delta:"+4.7% vs 2024",icon:"💰",c1:"#1a7a3a",c2:"#4cba6a"},
     {label:"Clients Actifs",val:(kpis.nb_clients||0).toLocaleString(),delta:`${kpis.nb_contrats||0} contrats`,icon:"👥",c1:"#2563eb",c2:"#60a5fa"},
     {label:"Sinistres",val:fmtTND(kpis.sin_total),delta:`Ratio: ${(kpis.ratio_sin||0).toFixed(1)}%`,icon:"🚗",c1:"#d93025",c2:"#f59e0b"},
+    {label:"Marge Technique",val:fmtTND(kpis.marge_technique_brute||0),delta:"Brute, avant frais",icon:"📈",c1:"#156b32",c2:"#1a7a3a"},
     {label:"Top Agence",val:String(kpis.top_agence||"—").split(" ").slice(0,2).join(" "),delta:fmtTND(kpis.top_agence_ca||0),icon:"🏆",c1:"#f59e0b",c2:"#1a7a3a"},
     {label:"Générés (live)",val:(kpis.total_generated||0).toLocaleString(),delta:"Toutes les 5s",icon:"⚡",c1:"#2ea84f",c2:"#4cba6a"},
   ]:[];

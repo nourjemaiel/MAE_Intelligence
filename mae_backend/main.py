@@ -637,6 +637,13 @@ def tool_portfolio_summary(agence=None, region=None, branche=None):
         "nb_contrats":        nb_contrats,
         "sinistres_total":    round(st, 2),
         "ratio_sinistralite": round(st / ca * 100, 2) if ca > 0 else 0,
+        # Marge technique BRUTE (avant frais de gestion/commissions) = primes
+        # - sinistres. "Brute" precise volontairement qu'elle exclut les
+        # frais operationnels (aucune colonne de frais/commissions n'est
+        # disponible dans les donnees source) -- ne pas presenter comme un
+        # resultat net complet. CAPITAUX n'y figure jamais : ce n'est pas
+        # une depense, c'est un plafond de garantie (exposition au risque).
+        "marge_technique_brute": round(ca - st, 2),
         "top_agence":         str(top_ag),
         "derniere_maj":       state["last_update"],
         "total_generes":      state["total_generated"],
@@ -1378,15 +1385,16 @@ def kpis(agence: str = "all", region: str = "all", branche: str = "all", mois: i
     top_ag = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().idxmax() if len(prod_f) > 0 else "N/A"
     top_ca = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().max()    if len(prod_f) > 0 else 0
     return {
-        "ca_total":        ca,
-        "nb_clients":      nb,
-        "nb_contrats":     nb,
-        "sin_total":       round(st, 2),
-        "ratio_sin":       round(st / ca * 100, 2) if ca > 0 else 0,
-        "top_agence":      str(top_ag),
-        "top_agence_ca":   round(top_ca, 2),
-        "last_update":     state["last_update"],
-        "total_generated": state["total_generated"],
+        "ca_total":             ca,
+        "nb_clients":           nb,
+        "nb_contrats":          nb,
+        "sin_total":            round(st, 2),
+        "ratio_sin":            round(st / ca * 100, 2) if ca > 0 else 0,
+        "marge_technique_brute": round(ca - st, 2),
+        "top_agence":           str(top_ag),
+        "top_agence_ca":        round(top_ca, 2),
+        "last_update":          state["last_update"],
+        "total_generated":      state["total_generated"],
     }
 
 
