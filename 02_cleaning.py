@@ -246,14 +246,14 @@ def clean_augment_shift(file_path, output_name):
             # ----------------------------------------------------------------
             # 8. NETTOYAGE DES MONTANTS + CONVERSION DES UNITÉS FINANCIÈRES
             # ----------------------------------------------------------------
-            # METHODOLOGIE DU CHOIX DU DIVISEUR -- une vraie formule, pas
-            # une comparaison de candidats au feeling. Aucune documentation
-            # officielle MAE ne precise l'unite brute des montants (pas de
-            # dictionnaire de donnees fourni), donc le diviseur k est
-            # DERIVE par rapport a une reference externe reelle et citee,
-            # pas cale sur un total agrege qu'on attend deja (ce que faisait
-            # l'ancienne version -- circulaire, on ajustait la reponse a la
-            # question).
+            # METHODOLOGIE DU CHOIX DU DIVISEUR -- formule dérivée d'une
+            # reference externe reelle, PAS d'un total agrege qu'on attend
+            # deja (circulaire) et PAS arrondie a un chiffre "propre" par
+            # convention supposee (la version precedente arrondissait 88,2
+            # a 100 en supposant que les systemes financiers stockent des
+            # multiplicateurs ronds -- hypothese non verifiee pour CE
+            # systeme MAE precisement, donc abandonnee : on garde la valeur
+            # derivee des donnees, pas une approximation esthetique).
             #
             # FORMULE :
             #   k = moyenne(PRIME_NETTE brute) / moyenne(prime auto reelle en Tunisie)
@@ -264,28 +264,34 @@ def clean_augment_shift(file_path, output_name):
             #     source : Managers.tn, 2021 -- "Combien coute en moyenne
             #     une assurance auto ?" (assurance.tn cite le meme ordre de
             #     grandeur pour le marche tunisien)
-            #   => k = 67 585,40 / 766,50 ≈ 88,2
+            #   => k = 67 585,40 / 766,50 ≈ 88,2 -- retenu tel quel (88)
             #
-            # k≈88 n'est pas exactement 100, ecart attendu et explicable :
-            #   - reference de 2021, primes en hausse depuis (+4 a 6%/an
-            #     rapportes en 2025 par le meme type de source) ;
-            #   - portefeuille MAE = mutuelle des enseignants, pas un
-            #     echantillon de la population generale -- profil de risque
-            #     et de vehicule different de la moyenne nationale.
-            # Les systemes financiers stockent conventionnellement les
-            # montants en entiers a un MULTIPLICATEUR ROND (comme stocker
-            # des centimes plutot que des unites, pour eviter l'imprecision
-            # des flottants sur des donnees comptables) -- jamais un
-            # multiplicateur impair comme x88. Le multiplicateur rond le
-            # plus proche de l'estimation empirique (88,2) est 100 : c'est
-            # ce qui est retenu, pas une preference esthetique.
+            # HYPOTHESE ALTERNATIVE TESTEE ET ECARTEE : un ecart aussi grand
+            # pourrait venir d'un melange contrats individuels/flotte (une
+            # flotte a une prime legitimement bien plus elevee, sans aucun
+            # probleme d'unite). Verifie : Mono_Flotte=10 (individuel)
+            # represente 399 961 lignes sur 400 000 (99,99%), et leur
+            # moyenne seule (67 575,56) est quasi identique a la moyenne
+            # globale (67 585,40) -- la quasi-totalite du portefeuille est
+            # individuelle et presente deja cet ecart. Le melange flotte
+            # n'explique donc pas l'ecart : ca reste bien une difference
+            # d'unite brute, pas un artefact de composition du portefeuille.
+            #
+            # k≈88 n'est pas exactement 100, ecart residuel attendu et
+            # explicable (reference externe de 2021 alors que les primes
+            # augmentent depuis ; portefeuille MAE = mutuelle des
+            # enseignants, pas un echantillon de la population generale) --
+            # mais rien ne justifie de forcer ce chiffre vers 100, donc k=88
+            # est utilise directement.
             #
             # Cette meme formule ecarte aussi explicitement l'option "ne
             # rien diviser" (k=1) : une prime moyenne reelle de 766,50 TND/an
             # representee par une valeur brute de 67 585,40 serait fausse
-            # d'un facteur ~88, pas juste "haute" -- pas une option valide,
-            # avec une reference chiffree a l'appui cette fois.
-            RAW_TO_DINARS = 100.0
+            # d'un facteur ~88, pas juste "haute" -- et ce facteur ne
+            # s'explique pas par un melange de types de contrats (voir
+            # verification ci-dessus), donc "garder tel quel" n'est pas une
+            # option valide non plus.
+            RAW_TO_DINARS = 88.0
 
             montants = ['CAPITAUX', 'REGLEMENTS', 'SAP', 'PRIME_NETTE']
             for col in montants:
