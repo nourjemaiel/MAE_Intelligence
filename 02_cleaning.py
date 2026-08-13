@@ -2,6 +2,52 @@ import pandas as pd
 import mlflow
 import os
 import math
+from datetime import datetime
+
+
+def compute_dynamic_date_shift(raw_max_date, today=None):
+    """
+    Calcule le decalage a appliquer aux colonnes de dates pour que
+    raw_max_date atterrisse sur le DERNIER JOUR DU MOIS PRECEDENT par
+    rapport a AUJOURD'HUI -- recalcule a CHAQUE execution du script, jamais
+    fige a une annee fixe.
+
+    POURQUOI (remarque 1c, superviseur) : un decalage fixe en annees
+    (l'ancienne version : +4 ans) place le dernier jour d'entrainement sur
+    un 31 decembre. Or 31 decembre + 1 mois = janvier de l'annee suivante :
+    le tout premier mois "previsionnel" est fige a janvier quelle que soit
+    la date reelle d'execution. Des qu'on execute/presente le pipeline
+    apres janvier de cette annee-la, une partie des mois "prevus" sont deja
+    passes dans la realite -- une prevision qui predit le passe n'est pas
+    logique. Aucun decalage en annees entieres ne peut resoudre ca : si les
+    donnees brutes se terminent un 31 decembre, le mois suivant sera
+    TOUJOURS janvier, qui que ce soit la date reelle d'aujourd'hui.
+    Preuve : notons Y l'annee du 31 decembre decale. Il faut A LA FOIS
+    31/12/Y <= aujourd'hui (donnees d'entrainement dans le passe) ET
+    01/01/(Y+1) > aujourd'hui (le mois previsionnel pas encore arrive).
+    La 1ere condition impose Y <= annee(aujourd'hui) ; la 2e impose
+    Y >= annee(aujourd'hui). Les deux ne coincident que si aujourd'hui
+    tombe EXACTEMENT le 31 decembre -- impossible a garantir a la date
+    d'une soutenance ou d'une demo.
+
+    SOLUTION : ne pas se limiter a un decalage en annees entieres. On
+    decale de la quantite exacte necessaire pour que la derniere date
+    d'entrainement tombe le dernier jour du mois precedant aujourd'hui,
+    quel que soit le jour d'execution. Consequence acceptee : le mois
+    calendaire associe a chaque transaction n'est plus forcement le meme
+    qu'avant le decalage -- acceptable ici car l'ensemble du schema de
+    dates est deja synthetique (aucune saisonnalite tunisienne reelle
+    n'est encodee dans le choix du mois d'origine), documente depuis le
+    depart. Ce qui compte est prevu par le pipeline (04_forecasting.py) :
+    la prevision demarre toujours "le mois prochain" par rapport a
+    aujourd'hui, plus jamais un mois deja ecoule -- vrai a CHAQUE execution,
+    pas seulement au moment ou ce code a ete ecrit.
+    """
+    if today is None:
+        today = pd.Timestamp(datetime.now().date())
+    first_of_this_month = pd.Timestamp(today.year, today.month, 1)
+    target_max_date = first_of_this_month - pd.Timedelta(days=1)  # dernier jour du mois precedent
+    return target_max_date - raw_max_date
 
 # =================================================================
 # 1. CONFIGURATION MLOPS
@@ -99,7 +145,7 @@ def build_region_label_map(codes):
     return labels
 
 
-def clean_augment_shift(file_path, output_name):
+def clean_augment_shift(file_path, output_name, date_shift):
     if not os.path.exists(file_path):
         print(f"❌ Fichier introuvable : {file_path}")
         return
@@ -214,7 +260,12 @@ def clean_augment_shift(file_path, output_name):
                 print("⚠️  Colonne 'Region' absente de ce fichier — décodage ignoré.")
 
             # ----------------------------------------------------------------
-            # 7. TIME SHIFT SÉLECTIF (décalage +4 ans vers 2025-2026)
+            # 7. TIME SHIFT SÉLECTIF (décalage DYNAMIQUE -- voir
+            #    compute_dynamic_date_shift() : recalcule a chaque execution
+            #    pour que l'entrainement se termine "le mois dernier" et la
+            #    prevision demarre "le mois prochain" par rapport a
+            #    aujourd'hui, quelle que soit la date reelle d'execution.
+            #    Remplace l'ancien decalage fixe +4 ans (remarque 1c).
             # ----------------------------------------------------------------
             date_columns_detected = []
             for col in df.columns:
@@ -239,9 +290,9 @@ def clean_augment_shift(file_path, output_name):
 
                     df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
                     df[col] = df[col].fillna(pd.Timestamp('2021-01-01'))
-                    df[col] = df[col] + pd.DateOffset(years=4)   # +4 ans exact (pas ~1461 jours)
+                    df[col] = df[col] + date_shift
                     date_columns_detected.append(col)
-                    print(f"📅 Colonne '{col}' décalée → max {df[col].dt.year.max()}")
+                    print(f"📅 Colonne '{col}' décalée → max {df[col].max().date()}")
 
             # ----------------------------------------------------------------
             # 8. NETTOYAGE DES MONTANTS + CONVERSION DES UNITÉS FINANCIÈRES
@@ -361,5 +412,19 @@ def clean_augment_shift(file_path, output_name):
 
 
 if __name__ == "__main__":
-    clean_augment_shift(os.path.join(BASE_DIR, "raw_data", "Base Production.csv"), "Production")
-    clean_augment_shift(os.path.join(BASE_DIR, "raw_data", "Base Sinistres.csv"), "Sinistres")
+    # Decalage calcule UNE SEULE FOIS a partir de DEBUT_PERI (Production),
+    # puis reutilise pour les DEUX fichiers -- garantit que Production et
+    # Sinistres restent sur la meme ligne de temps apres decalage (un
+    # sinistre doit rester contemporain du contrat concerne).
+    _prod_path = os.path.join(BASE_DIR, "raw_data", "Base Production.csv")
+    _raw_debut_peri = pd.to_datetime(
+        pd.read_csv(_prod_path, sep=';', encoding='latin-1', usecols=['DEBUT_PERI'])['DEBUT_PERI'],
+        dayfirst=True, errors='coerce'
+    )
+    _raw_max_date = _raw_debut_peri.max()
+    DATE_SHIFT = compute_dynamic_date_shift(_raw_max_date)
+    print(f"📅 Decalage dynamique calcule : {_raw_max_date.date()} -> "
+          f"{(_raw_max_date + DATE_SHIFT).date()} (base : aujourd'hui = {datetime.now().date()})")
+
+    clean_augment_shift(_prod_path, "Production", DATE_SHIFT)
+    clean_augment_shift(os.path.join(BASE_DIR, "raw_data", "Base Sinistres.csv"), "Sinistres", DATE_SHIFT)
