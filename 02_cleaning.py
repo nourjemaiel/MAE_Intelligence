@@ -246,11 +246,40 @@ def clean_augment_shift(file_path, output_name):
             # ----------------------------------------------------------------
             # 8. NETTOYAGE DES MONTANTS + CONVERSION DES UNITÉS FINANCIÈRES
             # ----------------------------------------------------------------
-            # AJUSTEMENT MAE (2026-07) : Les montants bruts du CSV d'origine sont 
-            # à échelle très élevée. Diviser par 1000 créait un volume trop faible 
-            # (~19.6M TND). Diviser par 100 aligne parfaitement le Chiffre d'Affaires 
-            # global de la base sur un volume cohérent de ~195.8M TND, ce qui est 
-            # très proche des performances réelles enregistrées par la MAE.
+            # METHODOLOGIE DU CHOIX DU DIVISEUR (revise -- l'ancienne
+            # justification "ca correspond au CA global attendu" etait
+            # circulaire : caler un diviseur sur un total agrege qu'on
+            # attend deja n'est pas une preuve, c'est ajuster la reponse a
+            # la question. Aucune documentation officielle MAE ne precise
+            # l'unite brute des montants (pas de dictionnaire de donnees
+            # fourni), donc a defaut on valide chaque diviseur candidat
+            # contre des ORDRES DE GRANDEUR REALISTES du marche tunisien de
+            # l'assurance auto, INDEPENDAMMENT sur les deux fichiers :
+            #
+            #   Diviseur   PRIME_NETTE (mediane)   REGLEMENTS (mediane)
+            #      1         49 000 TND/an           370 000 TND/sinistre
+            #    100            490 TND/an             3 700 TND/sinistre
+            #   1000             49 TND/an               370 TND/sinistre
+            #
+            #   - /1    : une prime annuelle de 49 000 TND (~16 000 USD) est
+            #     absurde -- superieure au prix de la plupart des vehicules
+            #     assures. Ecarte.
+            #   - /1000 : une prime de 49 TND/an (~16 USD) est irrealiste,
+            #     bien en-dessous du cout reel d'une assurance meme basique
+            #     en Tunisie. Ecarte.
+            #   - /100  : 490 TND/an de prime et 3 700 TND de reglement
+            #     median sont tous deux coherents avec des montants reels
+            #     observes sur le marche tunisien -- et ce sur les DEUX
+            #     fichiers INDEPENDAMMENT (primes ET sinistres), ce qui
+            #     suggere une convention d'unite brute commune plutot qu'une
+            #     coincidence. Retenu.
+            #
+            # Limite assumee : sans acces au systeme source MAE, ceci reste
+            # une validation par plausibilite economique, pas une
+            # confirmation documentaire de l'unite brute exacte. C'est
+            # neanmoins une methode reproductible et falsifiable (voir
+            # sanity check imprime plus bas), contrairement au calage sur
+            # un total agrege.
             RAW_TO_DINARS = 100.0
 
             montants = ['CAPITAUX', 'REGLEMENTS', 'SAP', 'PRIME_NETTE']
@@ -263,6 +292,21 @@ def clean_augment_shift(file_path, output_name):
                         ).fillna(0)
                     ) / RAW_TO_DINARS
             print(f"💰 Montants nettoyés et ajustés (/{RAW_TO_DINARS:.0f}) : {[c for c in montants if c in df.columns]}")
+
+            # Sanity check IMPRIME (pas seulement un commentaire) : verifie a
+            # chaque execution que le diviseur choisi produit toujours des
+            # ordres de grandeur plausibles -- alerte si une future version
+            # des donnees brutes rendrait ce choix caduc.
+            if 'PRIME_NETTE' in df.columns:
+                prime_med = df['PRIME_NETTE'].median()
+                if not (100 <= prime_med <= 3000):
+                    print(f"⚠️  ATTENTION : mediane PRIME_NETTE = {prime_med:,.0f} TND, "
+                          f"hors de la plage plausible [100, 3000] TND/an -- revalider RAW_TO_DINARS.")
+            if 'REGLEMENTS' in df.columns:
+                regl_med = df['REGLEMENTS'].median()
+                if regl_med > 0 and not (500 <= regl_med <= 50000):
+                    print(f"⚠️  ATTENTION : mediane REGLEMENTS = {regl_med:,.0f} TND, "
+                          f"hors de la plage plausible [500, 50000] TND/sinistre -- revalider RAW_TO_DINARS.")
 
             # ----------------------------------------------------------------
             # 9. SUPPRESSION DES DOUBLONS DE COLONNES
