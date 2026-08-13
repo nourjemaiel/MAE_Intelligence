@@ -162,11 +162,21 @@ def clean_augment_shift(file_path, output_name, date_shift):
             print(f"📥 Chargement : {len(df)} lignes uniques.")
 
             # ----------------------------------------------------------------
-            # 2. AUGMENTATION (+20%)
+            # 2. (SUPPRIME) Augmentation +20% -- remarque 1d, superviseur
             # ----------------------------------------------------------------
-            extra = df.sample(frac=0.20, random_state=42)
-            df = pd.concat([df, extra], ignore_index=True)
-            print(f"🚀 Augmentation terminée : {len(df)} lignes au total.")
+            # L'ancienne version prenait 20% des lignes deja dedupliquees et
+            # les recopiait telles quelles (df.sample + concat) -- ca
+            # n'ajoute aucune information reelle, juste des lignes IDENTIQUES
+            # a des lignes existantes, ce qui peut fausser toute analyse
+            # statistique (des doublons exacts ne sont pas des observations
+            # independantes, ex: biaiser artificiellement la densite en
+            # clustering). Supprimee plutot que remplacee par une technique
+            # de generation synthetique plus complexe (bootstrap+bruit,
+            # SMOTE...) : le jeu de donnees deduplique est deja substantiel
+            # (285 736 lignes Production, 12 462 Sinistres) et n'a pas
+            # besoin d'etre gonfle artificiellement -- la solution la plus
+            # simple et la plus defendable est de ne pas augmenter du tout.
+            print(f"✅ Pas d'augmentation -- {len(df)} lignes reelles dedupliquees conservees telles quelles.")
 
             # ----------------------------------------------------------------
             # 3. NETTOYAGE DES TYPES AVANT TOUT MAPPING
