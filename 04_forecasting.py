@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import os
 import mlflow
-from sklearn.linear_model import LinearRegression
+from prophet import Prophet
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # =================================================================
@@ -22,9 +22,6 @@ mlflow.set_experiment("MAE_Forecasting_Final")
 os.makedirs("plots", exist_ok=True)
 os.makedirs("outputs", exist_ok=True)
 
-# Croissance annuelle observée : +4.7% → mensuelle : (1.047)^(1/12) - 1
-MONTHLY_GROWTH_RATE = (1.047 ** (1 / 12)) - 1
-
 # =================================================================
 # 1. CHARGEMENT
 # =================================================================
@@ -36,12 +33,23 @@ def load_monthly_ca():
 
     df = pd.read_csv(path, low_memory=False)
     df['DEBUT_PERI'] = pd.to_datetime(df['DEBUT_PERI'], errors='coerce')
-
-    # CORRIGÉ : filtre strict 2025 + vérification colonne
-    df = df[df['DEBUT_PERI'].dt.year == 2025].copy()
     if 'PRIME_NETTE' not in df.columns:
         print("❌ Colonne PRIME_NETTE manquante.")
         return None
+
+    # MISE A JOUR (remarque 2, superviseur) : l'ancien filtre "annee == 2025"
+    # ne correspond plus a rien depuis le decalage de dates DYNAMIQUE (voir
+    # 02_cleaning.py, compute_dynamic_date_shift) -- les donnees ne tombent
+    # plus dans une seule annee calendaire fixe. Remplace par la meme
+    # detection DONNEES-DRIVEE que model_comparison.ipynb : le fichier brut
+    # contient ~1 an de donnees denses (des milliers de contrats/semaine)
+    # precede d'une longue traine eparse (0.05% du volume, artefact probable
+    # d'un export "instantane des polices actives"). On isole la region
+    # dense et on exclut le mois-frontiere partiel cree par la coupure
+    # semaine/mois.
+    weekly_counts = df.groupby(df['DEBUT_PERI'].dt.to_period('W')).size()
+    dense_weeks = weekly_counts[weekly_counts > 100].index
+    df = df[df['DEBUT_PERI'].dt.to_period('W').isin(dense_weeks)].copy()
 
     df['Mois'] = df['DEBUT_PERI'].dt.to_period('M')
     monthly = df.groupby('Mois')['PRIME_NETTE'].sum().reset_index()
@@ -49,105 +57,80 @@ def load_monthly_ca():
     monthly['ds'] = monthly['Mois'].dt.to_timestamp()
     monthly = monthly.sort_values('ds').reset_index(drop=True)
 
+    _before = len(monthly)
+    monthly = monthly[monthly['CA'] > 1e6].reset_index(drop=True)
+    if len(monthly) < _before:
+        print(f"⚠️  {_before - len(monthly)} mois partiel(s) exclu(s) (effet de bord semaine/mois).")
+
     if len(monthly) < 3:
         print(f"⚠️  Seulement {len(monthly)} mois disponibles — prévision peu fiable.")
 
-    print(f"✅ {len(monthly)} mois de données chargés (2025).")
+    print(f"✅ {len(monthly)} mois de données représentatives chargés.")
     print(monthly[['ds', 'CA']].to_string(index=False))
-    print(f"\n📈 Taux de croissance mensuel : {MONTHLY_GROWTH_RATE*100:.3f}%")
     return monthly
 
 
 # =================================================================
-# 2. FEATURES : tendance + saisonnalite sin/cos (1 harmonique)
+# 2. ENTRAÎNEMENT (Prophet)
 # =================================================================
-# CHANGEMENT (voir model_comparison.ipynb, section tuning Optuna) : ce
-# modele avait a l'origine 2 harmoniques (4 features saisonnieres + 1
-# tendance = 5 au total). Sur seulement 12 points d'entrainement (l'annee
-# 2025), un tuning Optuna evalue en validation croisee leave-one-out
-# (LOOCV -- pas en erreur intra-echantillon, qui favorise mecaniquement la
-# complexite sans garantir la generalisation) a montre qu'1 seule
-# harmonique generalise MIEUX : RMSE LOOCV ~1.00M TND contre ~1.74M TND
-# pour 2 harmoniques, soit ~43% d'erreur en moins hors-echantillon. La 2e
-# harmonique captait probablement du bruit propre a 2025 plutot qu'un
-# motif saisonnier reel. Feature set reduit a 3 (tendance + 1 harmonique).
-def make_features(ds_series, t_offset=0):
-    t = np.arange(t_offset, t_offset + len(ds_series))
-    month = ds_series.dt.month.values
-    X = np.column_stack([
-        t,
-        np.sin(2 * np.pi * month / 12),
-        np.cos(2 * np.pi * month / 12),
-    ])
-    return X
+# CHANGEMENT (remarque 2, superviseur : "R²=0.533 n'est pas bon, essayez
+# d'autres modeles") : la Regression Lineaire Saisonniere a ete comparee
+# empiriquement a 7 alternatives dans model_comparison.ipynb (Naif, SARIMA,
+# ETS, ARIMA sans saisonnalite, XGBoost, LSTM, Prophet), dans une seule
+# comparaison unifiee (intra-echantillon + LOOCV + backtest glissant hors-
+# echantillon, ce dernier etant la mesure qui fait foi vu le peu de
+# donnees). Prophet generalise nettement mieux que tous les autres modeles
+# testes sur les trois mesures -- voir model_comparison.ipynb pour le
+# detail. Adopte ici en production a la place de la regression lineaire +
+# croissance manuelle.
+# Hyperparametres tunes par Optuna + LOOCV (meme notebook, cellule "MODELE
+# 7 : PROPHET") plutot que choisis a la main -- a regenerer ici si le
+# notebook est ré-exécuté sur de nouvelles données.
+PROPHET_CONFIG = dict(
+    yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=False,
+    seasonality_mode='additive', changepoint_prior_scale=0.0244, seasonality_prior_scale=0.599,
+)
+PROPHET_FOURIER_ORDER = 1
 
-
-# =================================================================
-# 3. ENTRAÎNEMENT
-# =================================================================
 def train_model(monthly):
-    X = make_features(monthly['ds'])
+    df_prophet = monthly[['ds', 'CA']].rename(columns={'CA': 'y'})
+    model = Prophet(**PROPHET_CONFIG)
+    model.add_seasonality(name='monthly', period=30.5, fourier_order=PROPHET_FOURIER_ORDER)
+    model.fit(df_prophet)
+
     y = monthly['CA'].values
-
-    model = LinearRegression()
-    model.fit(X, y)
-
-    y_pred = model.predict(X)
+    y_pred = model.predict(df_prophet)['yhat'].values
     mae  = mean_absolute_error(y, y_pred)
     rmse = np.sqrt(mean_squared_error(y, y_pred))
     r2   = r2_score(y, y_pred)
-    std  = np.std(y - y_pred)
 
-    with mlflow.start_run(run_name="LinearRegression_Seasonal_Growth"):
+    with mlflow.start_run(run_name="Prophet_Seasonal"):
         mlflow.log_metric("MAE",  mae)
         mlflow.log_metric("RMSE", rmse)
         mlflow.log_metric("R2",   r2)
-        mlflow.log_metric("monthly_growth_rate", MONTHLY_GROWTH_RATE)
         mlflow.log_param("n_mois_entrainement", len(monthly))
 
-    print(f"\n📊 Performance du modèle :")
+    print(f"\n📊 Performance du modèle (Prophet) :")
     print(f"   MAE  : {mae/1e6:.2f}M TND")
     print(f"   RMSE : {rmse/1e6:.2f}M TND")
     print(f"   R²   : {r2:.3f}")
-    return model, y_pred, std
+    return model, y_pred
 
 
 # =================================================================
-# 4. PRÉDICTION 12 MOIS AVEC TENDANCE DE CROISSANCE RÉELLE
+# 3. PRÉDICTION 12 MOIS
 # =================================================================
-def predict_future(model, monthly, std, periods=12):
-    last_date = monthly['ds'].max()
-    future_dates = pd.date_range(
-        start=last_date + pd.DateOffset(months=1),
-        periods=periods, freq='MS'
-    )
-    future_ds = pd.Series(future_dates)
-    X_future  = make_features(future_ds, t_offset=len(monthly))
-
-    y_base = model.predict(X_future)
-
-    # Correction d'ancrage sur le dernier CA réel
-    last_ca   = monthly['CA'].iloc[-1]
-    base_last = model.predict(
-        make_features(pd.Series([last_date]), t_offset=len(monthly) - 1)
-    )[0]
-    correction = last_ca / base_last if base_last > 0 else 1.0
-
-    growth_factors = np.array([(1 + MONTHLY_GROWTH_RATE) ** (i + 1) for i in range(periods)])
-    y_future = y_base * correction * growth_factors
-
-    # Intervalle de confiance croissant
-    ci_factors = np.array([1 + 0.1 * i for i in range(periods)])
-    lower = y_future - 1.5 * std * ci_factors
-    upper = y_future + 1.5 * std * ci_factors
-
-    future_df = pd.DataFrame({
-        'ds'         : future_dates,
-        'Mois'       : future_dates.strftime('%Y-%m'),
-        'yhat'       : y_future,
-        'yhat_lower' : np.maximum(lower, 0),
-        'yhat_upper' : upper,
-    })
+# Intervalles de confiance et tendance viennent directement de Prophet
+# (interval_width par defaut = 80%) -- plus de correction d'ancrage ni de
+# taux de croissance fixe superposes a la main : Prophet apprend deja sa
+# propre tendance et incertitude a partir des donnees.
+def predict_future(model, monthly, periods=12):
+    future = model.make_future_dataframe(periods=periods, freq='MS')
+    forecast = model.predict(future)
+    future_df = forecast.iloc[-periods:][['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
+    future_df['yhat_lower'] = future_df['yhat_lower'].clip(lower=0)
+    future_df['Mois'] = future_df['ds'].dt.strftime('%Y-%m')
+    future_df = future_df.reset_index(drop=True)
     return future_df
 
 
@@ -161,28 +144,31 @@ def plot_forecast(monthly, y_fitted, future_df):
     fig.patch.set_facecolor('white')
     ax.set_facecolor('#FAFAFA')
 
+    hist_label = f"CA Réel ({monthly['ds'].min().strftime('%b %Y')} – {monthly['ds'].max().strftime('%b %Y')})"
+    forecast_label = f"CA Prévu ({future_df['ds'].min().strftime('%b %Y')} – {future_df['ds'].max().strftime('%b %Y')})"
+
     # Données réelles
     ax.fill_between(monthly['ds'], monthly['CA'], alpha=0.12, color=PASTEL_BLUE)
     ax.plot(monthly['ds'], monthly['CA'],
             marker='o', color=DARK_BLUE, linewidth=2.5,
-            markersize=7, label='CA Réel 2025', zorder=5)
+            markersize=7, label=hist_label, zorder=5)
 
     # Ajustement modèle
     ax.plot(monthly['ds'], y_fitted,
             color=PASTEL_PURPLE, linewidth=1.5,
             linestyle='--', alpha=0.7, label='Ajustement modèle')
 
-    # Intervalle de confiance
+    # Intervalle de confiance (natif Prophet, 80% par défaut)
     ax.fill_between(future_df['ds'],
                     future_df['yhat_lower'], future_df['yhat_upper'],
                     alpha=0.20, color=PASTEL_PINK,
-                    label='Intervalle de confiance (±1.5σ)')
+                    label='Intervalle de confiance (Prophet, 80%)')
 
     # Courbe prédite
     ax.plot(future_df['ds'], future_df['yhat'],
             marker='o', color=DARK_PINK, linewidth=2.5,
             linestyle='--', markersize=7,
-            label='CA Prédit 2026 (+4.7% croissance)', zorder=5)
+            label=forecast_label, zorder=5)
 
     # Annotations (1 sur 2 pour éviter surcharge)
     for i, (_, row) in enumerate(future_df.iterrows()):
@@ -201,12 +187,13 @@ def plot_forecast(monthly, y_fitted, future_df):
             '  Début prévision ▶',
             color='#666', fontsize=10, va='top', style='italic')
 
-    # Boîte résumé croissance
-    avg_2025 = monthly['CA'].mean()
-    avg_2026 = future_df['yhat'].mean()
-    growth_pct = (avg_2026 / avg_2025 - 1) * 100
+    # Boîte résumé croissance (moyenne prévue vs moyenne historique, pas un
+    # taux fixe imposé -- directement lu sur la sortie du modèle)
+    avg_hist     = monthly['CA'].mean()
+    avg_forecast = future_df['yhat'].mean()
+    growth_pct = (avg_forecast / avg_hist - 1) * 100
     ax.text(0.75, 0.05,
-            f'Croissance prévue 2026 : +{growth_pct:.1f}%',
+            f'Croissance prévue : {growth_pct:+.1f}%',
             transform=ax.transAxes, fontsize=11, color=DARK_PINK,
             bbox=dict(boxstyle='round,pad=0.4', facecolor='white',
                       edgecolor=PASTEL_PINK, alpha=0.8))
@@ -214,8 +201,10 @@ def plot_forecast(monthly, y_fitted, future_df):
     ax.yaxis.set_major_formatter(
         mticker.FuncFormatter(lambda x, _: f'{x/1e6:.0f}M TND'))
     ax.set_ylim(bottom=monthly['CA'].min() * 0.85)
-    ax.set_title("Prévision du Chiffre d'Affaires — Jan à Déc 2026",
-                 fontsize=15, fontweight='bold', pad=20)
+    ax.set_title(
+        f"Prévision du Chiffre d'Affaires — {future_df['ds'].min().strftime('%b %Y')} "
+        f"à {future_df['ds'].max().strftime('%b %Y')}",
+        fontsize=15, fontweight='bold', pad=20)
     ax.set_ylabel('CA Mensuel (TND)', fontsize=12)
     ax.legend(fontsize=11, loc='upper left', framealpha=0.9, edgecolor='#ccc')
     ax.grid(True, alpha=0.3)
@@ -255,14 +244,14 @@ def export_results(future_df):
 # EXÉCUTION
 # =================================================================
 if __name__ == "__main__":
-    print("🚀 Prévision CA 12 mois — MAE Assurances 2026\n")
+    print("🚀 Prévision CA 12 mois — MAE Assurances\n")
 
     monthly = load_monthly_ca()
     if monthly is None:
         exit()
 
-    model, y_fitted, std = train_model(monthly)
-    future_df = predict_future(model, monthly, std, periods=12)
+    model, y_fitted = train_model(monthly)
+    future_df = predict_future(model, monthly, periods=12)
 
     plot_forecast(monthly, y_fitted, future_df)
     export_results(future_df)

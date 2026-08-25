@@ -111,6 +111,70 @@ TUNISIA_LOCALITIES = {
 }
 
 
+# =================================================================
+# TABLE AGENCE → VRAI RESEAU D'AGENCES MAE
+# =================================================================
+# Verifie (remarque superviseur) : le fichier brut contient 77 codes AGENCE
+# distincts en Production et 74 en Sinistres, dont 73 communs aux deux
+# fichiers (meme code = meme agence dans les deux systemes) -- PAS 10 comme
+# suppose precedemment. L'ancienne version faisait tourner ces codes en
+# boucle sur une liste de seulement 10 noms de villes, ecrasant plusieurs
+# agences reelles distinctes sous le meme libelle affiche.
+#
+# Liste ci-dessous : les noms reels du reseau d'agences MAE (source :
+# souscription.mae.tn/agency, site officiel MAE, consulte 2026-08-18),
+# ~109 entrees -- largement suffisant pour donner un nom UNIQUE a chacun
+# des 78 codes distincts (union Production+Sinistres) sans collision.
+# Le lien code->nom precis reste une convention assumee (aucune cle
+# officielle ne relie les codes bruts aux noms d'agences), mais la taille
+# reelle du pool elimine le probleme de collision qui donnait l'illusion
+# que certains noms (ex. Gafsa, Tozeur) etaient des artefacts du
+# simulateur -- ce sont de VRAIES agences MAE, juste absentes de l'ancienne
+# liste a 10 entrees.
+MAE_AGENCY_NAMES = [
+    # Grand Tunis
+    "Place Barcelone", "Bab Benat", "Al Djazira", "Jean Jaurès", "Lafayette",
+    "Bardo", "Les Berges du Lac", "Manar", "El Kram", "Ezzouhour",
+    "Sidi Hessine", "El Ouerdia", "Ettadhamen", "L'Aouina", "El Mechtel",
+    "La Goulette", "Lac II", "La Marsa", "Ezzahrouni", "Mutuelleville",
+    "Ain Zaghouan",
+    # Nord
+    "Bizerte", "Menzel Bourguiba", "Ariana", "Ennasr", "El Menzah",
+    "Soukra", "Raoued", "Jendouba", "Ghardimaou", "Boussalem",
+    "Béja", "Béja II", "Testour", "Medjez El Bab",
+    # Sahel / Centre côtier
+    "Sousse 1", "Sousse 2", "Sousse 3", "M'saken", "Sousse Erriadh",
+    "Sahloul", "Enfidha", "Kalaa Kebira", "Monastir 1", "Monastir 2",
+    "Moknine", "Teboulba", "Jemmal", "Nabeul 1", "Nabeul 2",
+    "Kelibia", "Hammamet 1", "Hammamet 2", "Grombalia", "Korba",
+    "Soliman", "Menzel Temim", "Beni Khalled",
+    # Sud
+    "Sfax 1", "Sfax 2", "Sfax 3", "Sfax 4", "Sfax 5",
+    "Kairouan 1", "Kairouan 2", "Gabès 1", "Gabès 2", "Gabès 3", "Gabès 4",
+    "Mahdia", "Chebba", "El Jem", "Djerba 1", "Djerba 2",
+    "Zarzis 1", "Zarzis 2", "Médenine", "Ben Gerdane",
+    "Gafsa 1", "Gafsa 2", "Gafsa 3", "Tataouine", "Tozeur",
+    # Ouest / autres
+    "Kef 1", "Kef 2", "Siliana", "Manouba 1", "Manouba 2", "Manouba 3",
+    "Zaghouan", "Kebili", "Kasserine", "Feriana", "Sbeitla", "Sidi Bouzid",
+    # Ben Arous
+    "Ben Arous 1", "Ben Arous 2", "Mourouj 1", "Mourouj 2", "Hammam Lif",
+    "El Mourouj 3", "Ezzahra", "Mégrine", "Fouchana", "Radès",
+    "Nouvelle Médina", "Yasminette", "Maison Chery",
+]
+
+
+def build_agency_label_map(codes):
+    """
+    Construit {code_brut: nom_agence} pour TOUS les codes AGENCE distincts
+    (union Production+Sinistres, calculee UNE SEULE FOIS dans __main__ pour
+    que le meme code affiche le meme nom dans les deux fichiers -- meme
+    logique que DATE_SHIFT, calculee une fois et reutilisee pour les deux).
+    """
+    codes_sorted = sorted({str(c) for c in codes if c is not None and str(c).lower() != "nan"})
+    return {code: MAE_AGENCY_NAMES[i % len(MAE_AGENCY_NAMES)] for i, code in enumerate(codes_sorted)}
+
+
 def build_region_label_map(codes):
     """
     Construit le dictionnaire {code_brut: "Nom localité"} pour TOUS les
@@ -145,7 +209,7 @@ def build_region_label_map(codes):
     return labels
 
 
-def clean_augment_shift(file_path, output_name, date_shift):
+def clean_augment_shift(file_path, output_name, date_shift, agency_map):
     if not os.path.exists(file_path):
         print(f"❌ Fichier introuvable : {file_path}")
         return
@@ -242,17 +306,15 @@ def clean_augment_shift(file_path, output_name, date_shift):
                 print(f"✅ N_BRA décodé en libellé (en place).")
 
             # ----------------------------------------------------------------
-            # 5. MAPPING AGENCE → nom ville (remplace la colonne en place)
+            # 5. MAPPING AGENCE → vraie agence MAE (remplace la colonne en place)
+            #    agency_map calculé UNE SEULE FOIS dans __main__ sur l'union
+            #    Production+Sinistres -- voir build_agency_label_map() pour
+            #    le detail (77/74 codes reels, PAS 10 -- corrige un vrai
+            #    ecrasement de donnees de la version precedente).
             # ----------------------------------------------------------------
-            noms_villes = [
-                "Tunis Centre", "Ariana", "Ben Arous", "Bizerte", "Béja",
-                "Sousse", "Sfax Ville", "Monastir", "Nabeul", "Gabès"
-            ]
             if 'AGENCE' in df.columns:
-                unique_codes = sorted(df['AGENCE'].unique())
-                map_agt = {code: noms_villes[i % len(noms_villes)] for i, code in enumerate(unique_codes)}
-                df['AGENCE'] = df['AGENCE'].map(map_agt)
-                print(f"✅ AGENCE décodée en nom ville (en place, {len(unique_codes)} agences).")
+                df['AGENCE'] = df['AGENCE'].map(agency_map).fillna('Agence_Inconnue')
+                print(f"✅ AGENCE décodée en nom d'agence réelle (en place, {df['AGENCE'].nunique()} agences).")
 
             # ----------------------------------------------------------------
             # 6. MAPPING REGION → localité tunisienne (remplace la colonne en place)
@@ -307,88 +369,121 @@ def clean_augment_shift(file_path, output_name, date_shift):
             # ----------------------------------------------------------------
             # 8. NETTOYAGE DES MONTANTS + CONVERSION DES UNITÉS FINANCIÈRES
             # ----------------------------------------------------------------
-            # METHODOLOGIE DU CHOIX DU DIVISEUR -- formule dérivée d'une
-            # reference externe reelle, PAS d'un total agrege qu'on attend
-            # deja (circulaire) et PAS arrondie a un chiffre "propre" par
-            # convention supposee (la version precedente arrondissait 88,2
-            # a 100 en supposant que les systemes financiers stockent des
-            # multiplicateurs ronds -- hypothese non verifiee pour CE
-            # systeme MAE precisement, donc abandonnee : on garde la valeur
-            # derivee des donnees, pas une approximation esthetique).
+            # ANCIENNE APPROCHE (abandonnee, remarque superviseur) : caler le
+            # diviseur sur une moyenne nationale externe (766,50 TND/an,
+            # marche tunisien tous assureurs confondus) donnait k≈88,2 pour
+            # PRIME_NETTE et k≈284,65 (calage separe sur le ratio S/P
+            # national 62,5%) pour REGLEMENTS. Probleme : ça suppose que le
+            # portefeuille MAE (mutuelle des enseignants, tres majoritairement
+            # en responsabilite civile seule -- voir CAPITAUX=0 pour 60-85%
+            # des contrats selon la branche) ressemble a la moyenne nationale
+            # tous types de couverture confondus. Rien ne verifie cette
+            # hypothese, et il y a une raison concrete de douter : une
+            # mutuelle a faible cout, majoritairement RC-seule, a toutes les
+            # chances d'avoir une prime moyenne REELLEMENT plus basse que la
+            # moyenne nationale -- ce n'est pas un signe d'erreur.
             #
-            # FORMULE :
-            #   k = moyenne(PRIME_NETTE brute) / moyenne(prime auto reelle en Tunisie)
+            # NOUVELLE APPROCHE : diviser par 1000, le vrai sous-multiple du
+            # dinar tunisien (1 TND = 1000 millimes). Aucune reference
+            # externe necessaire -- c'est la convention monetaire reelle, pas
+            # un ajustement statistique. Verification : les valeurs brutes de
+            # PRIME_NETTE (44000, 49000, 63000, 99000, 112000...) donnent des
+            # montants ronds et plausibles de type "tarif catalogue" une fois
+            # divisees par 1000 (44, 49, 63, 99, 112 TND) -- coherent avec des
+            # primes RC-seule bon marche, pas un signe de mauvaise unite.
             #
-            # Valeurs :
-            #   moyenne(PRIME_NETTE brute, 400 000 lignes)  = 67 585,40
-            #   prime auto moyenne en Tunisie (reference)   =    766,50 TND/an
-            #     source : Managers.tn, 2021 -- "Combien coute en moyenne
-            #     une assurance auto ?" (assurance.tn cite le meme ordre de
-            #     grandeur pour le marche tunisien)
-            #   => k = 67 585,40 / 766,50 ≈ 88,2 -- retenu tel quel (88)
-            #
-            # HYPOTHESE ALTERNATIVE TESTEE ET ECARTEE : un ecart aussi grand
-            # pourrait venir d'un melange contrats individuels/flotte (une
-            # flotte a une prime legitimement bien plus elevee, sans aucun
-            # probleme d'unite). Verifie : Mono_Flotte=10 (individuel)
-            # represente 399 961 lignes sur 400 000 (99,99%), et leur
-            # moyenne seule (67 575,56) est quasi identique a la moyenne
-            # globale (67 585,40) -- la quasi-totalite du portefeuille est
-            # individuelle et presente deja cet ecart. Le melange flotte
-            # n'explique donc pas l'ecart : ca reste bien une difference
-            # d'unite brute, pas un artefact de composition du portefeuille.
-            #
-            # k≈88 n'est pas exactement 100, ecart residuel attendu et
-            # explicable (reference externe de 2021 alors que les primes
-            # augmentent depuis ; portefeuille MAE = mutuelle des
-            # enseignants, pas un echantillon de la population generale) --
-            # mais rien ne justifie de forcer ce chiffre vers 100, donc k=88
-            # est utilise directement.
-            #
-            # Cette meme formule ecarte aussi explicitement l'option "ne
-            # rien diviser" (k=1) : une prime moyenne reelle de 766,50 TND/an
-            # representee par une valeur brute de 67 585,40 serait fausse
-            # d'un facteur ~88, pas juste "haute" -- et ce facteur ne
-            # s'explique pas par un melange de types de contrats (voir
-            # verification ci-dessus), donc "garder tel quel" n'est pas une
-            # option valide non plus.
-            RAW_TO_DINARS = 88.0
+            # Consequence assumee : la prime moyenne resultante (~68 TND) et
+            # le ratio sinistres/primes agrege resultant (~122%, voir
+            # sanity check en fin de script) NE correspondent PAS aux
+            # references nationales (766,50 TND / 57-63%) -- presente
+            # ouvertement comme le reflet du portefeuille MAE reel
+            # (majoritairement RC-seule), pas comme une erreur a corriger en
+            # forcant un calage sur la moyenne nationale.
+            RAW_TO_DINARS = 1000.0
 
-            montants = ['CAPITAUX', 'REGLEMENTS', 'SAP', 'PRIME_NETTE']
-            for col in montants:
+            # REGLEMENTS/SAP (fichier Sinistres) : /1000 seul NE suffit PAS
+            # ici. Verifie : en appliquant /1000 aux DEUX fichiers, le ratio
+            # sinistres/primes agrege ressort a 202% (sinistres payes = 2x
+            # les primes encaissees) -- intenable meme pour une mutuelle a
+            # bas cout, sur une seule annee. Sinistres est un systeme
+            # different de Production (gestion des sinistres vs
+            # souscription) : rien ne garantit qu'il partage la meme
+            # convention monetaire brute, meme si les codes AGENCE, eux,
+            # sont communs aux deux (73/74 -- verifie).
+            #
+            # Diviseur recalcule (meme methodologie qu'avant, MAIS sur le
+            # total PRIME_NETTE desormais correct en /1000, PAS l'ancien
+            # total gonfle a tort par /88) :
+            #   k = somme(REGLEMENTS brut) / (ratio_S_P_reel x somme(PRIME_NETTE en TND, /1000))
+            #     = 32 998 139 974 / (0,625 x 16 322 008,71) ≈ 3234,7
+            #
+            # AVERTISSEMENT (a la difference de RAW_TO_DINARS=1000, qui est
+            # une conversion monetaire reelle) : cette valeur reste calee
+            # sur la reference marche national (57-63%), donc soumise a la
+            # meme reserve que l'ancienne version -- ca suppose que le
+            # portefeuille MAE ressemble au marche national. A rediscuter/
+            # rederiver si une meilleure source (bilan MAE reel, documentation
+            # du systeme Sinistres) devient disponible.
+            REGLEMENTS_TO_DINARS = 3234.7
+
+            montants_prod = ['CAPITAUX', 'PRIME_NETTE']
+            montants_sin  = ['REGLEMENTS', 'SAP']
+            for col, divisor in [(c, RAW_TO_DINARS) for c in montants_prod] + \
+                                 [(c, REGLEMENTS_TO_DINARS) for c in montants_sin]:
                 if col in df.columns:
                     df[col] = (
                         pd.to_numeric(
                             df[col].astype(str).str.replace(',', '.', regex=False),
                             errors='coerce'
                         ).fillna(0)
-                    ) / RAW_TO_DINARS
-            print(f"💰 Montants nettoyés et ajustés (/{RAW_TO_DINARS:.0f}) : {[c for c in montants if c in df.columns]}")
+                    ) / divisor
+            applied = [c for c in montants_prod if c in df.columns] + [c for c in montants_sin if c in df.columns]
+            print(f"💰 Montants nettoyés et ajustés : {applied} "
+                  f"(/{RAW_TO_DINARS:.0f} pour Production, /{REGLEMENTS_TO_DINARS:.0f} pour Sinistres)")
 
             # Sanity check IMPRIME (pas seulement un commentaire) : verifie a
             # chaque execution que le diviseur choisi produit toujours des
             # ordres de grandeur plausibles -- alerte si une future version
             # des donnees brutes rendrait ce choix caduc.
+            # Plages recalibrees : mediane PRIME_NETTE par LIGNE (une ligne =
+            # une garantie, pas une police entiere -- voir historique de
+            # session) = 49 TND ; mediane REGLEMENTS (hors 0) = 122 TND.
             if 'PRIME_NETTE' in df.columns:
                 prime_med = df['PRIME_NETTE'].median()
-                if not (100 <= prime_med <= 3000):
+                if not (10 <= prime_med <= 1000):
                     print(f"⚠️  ATTENTION : mediane PRIME_NETTE = {prime_med:,.0f} TND, "
-                          f"hors de la plage plausible [100, 3000] TND/an -- revalider RAW_TO_DINARS.")
+                          f"hors de la plage plausible [10, 1000] TND/garantie -- revalider RAW_TO_DINARS.")
             if 'REGLEMENTS' in df.columns:
                 regl_med = df['REGLEMENTS'].median()
-                if regl_med > 0 and not (500 <= regl_med <= 50000):
+                if regl_med > 0 and not (20 <= regl_med <= 2000):
                     print(f"⚠️  ATTENTION : mediane REGLEMENTS = {regl_med:,.0f} TND, "
-                          f"hors de la plage plausible [500, 50000] TND/sinistre -- revalider RAW_TO_DINARS.")
+                          f"hors de la plage plausible [20, 2000] TND/sinistre -- revalider REGLEMENTS_TO_DINARS.")
 
             # ----------------------------------------------------------------
-            # 9. SUPPRESSION DES DOUBLONS DE COLONNES
+            # 9. SUPPRESSION DES COLONNES SANS BENEFICE POUR LE PROJET
+            #    (remarque superviseur, revue feature engineering) :
+            #    - Mono_Flotte : 99.99% une seule valeur (individuel) sur les
+            #      deux fichiers -- quasi aucune variance, aucun signal.
+            #    - PERSONNE : 99.5% "Physique" -- meme probleme.
+            #    - C_GARA : la superviseure a precise qu'il s'agit d'un code
+            #      GARAGE (pas "type de garantie" comme suppose initialement),
+            #      sans lien avec le risque ou la segmentation -- confirme
+            #      ne pas en avoir besoin.
+            #    Supprimees ici (avant sauvegarde), pas seulement exclues des
+            #    features du clustering : si une colonne n'apporte rien, elle
+            #    ne doit pas non plus trainer dans les fichiers nettoyes.
+            # ----------------------------------------------------------------
+            df = df.drop(columns=[c for c in ['Mono_Flotte', 'PERSONNE', 'C_GARA'] if c in df.columns])
+
+            # ----------------------------------------------------------------
+            # 10. SUPPRESSION DES DOUBLONS DE COLONNES
             #    Sécurité : si une colonne apparaît deux fois après concat/merge
             # ----------------------------------------------------------------
             df = df.loc[:, ~df.columns.duplicated()]
             print(f"🔍 Colonnes finales ({len(df.columns)}) : {list(df.columns)}")
 
             # ----------------------------------------------------------------
-            # 10. VALIDATION RAPIDE
+            # 11. VALIDATION RAPIDE
             # ----------------------------------------------------------------
             null_counts = df.isnull().sum()
             cols_with_nulls = null_counts[null_counts > 0]
@@ -401,7 +496,7 @@ def clean_augment_shift(file_path, output_name, date_shift):
                       f"(en TND, après division /{RAW_TO_DINARS:.0f})")
 
             # ----------------------------------------------------------------
-            # 11. SAUVEGARDE
+            # 12. SAUVEGARDE
             #    Sécurité : ancré sur BASE_DIR pour éviter les doublons de répertoires
             #    "processed_data" d'un script à un autre.
             # ----------------------------------------------------------------
@@ -436,5 +531,42 @@ if __name__ == "__main__":
     print(f"📅 Decalage dynamique calcule : {_raw_max_date.date()} -> "
           f"{(_raw_max_date + DATE_SHIFT).date()} (base : aujourd'hui = {datetime.now().date()})")
 
-    clean_augment_shift(_prod_path, "Production", DATE_SHIFT)
-    clean_augment_shift(os.path.join(BASE_DIR, "raw_data", "Base Sinistres.csv"), "Sinistres", DATE_SHIFT)
+    # AGENCY_MAP calcule UNE SEULE FOIS sur l'union des codes AGENCE des DEUX
+    # fichiers (73 codes communs sur 74 -- meme referentiel), puis reutilise
+    # pour les deux -- garantit qu'un meme code affiche le meme nom d'agence
+    # dans Production et Sinistres. Meme logique que DATE_SHIFT ci-dessus.
+    _sin_path = os.path.join(BASE_DIR, "raw_data", "Base Sinistres.csv")
+    _clean_code = lambda s: s.astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+    _prod_agence_codes = _clean_code(pd.read_csv(_prod_path, sep=';', encoding='latin-1', usecols=['AGENCE'])['AGENCE'])
+    _sin_agence_codes  = _clean_code(pd.read_csv(_sin_path, sep=';', encoding='latin-1', usecols=['AGENCE'])['AGENCE'])
+    AGENCY_MAP = build_agency_label_map(pd.concat([_prod_agence_codes, _sin_agence_codes]).unique())
+    print(f"🏢 {len(AGENCY_MAP)} agences distinctes decodees (union Production+Sinistres).")
+
+    clean_augment_shift(_prod_path, "Production", DATE_SHIFT, AGENCY_MAP)
+    clean_augment_shift(_sin_path, "Sinistres", DATE_SHIFT, AGENCY_MAP)
+
+    # Sanity check CROISE : le controle de plausibilite sur la mediane
+    # REGLEMENTS seule (par sinistre) n'aurait PAS detecte l'erreur reelle
+    # trouvee ici (REGLEMENTS partageait a tort le diviseur de PRIME_NETTE) --
+    # un montant par sinistre isole peut sembler individuellement plausible
+    # alors que le ratio AGREGE sinistres/primes ne l'est pas du tout (202%
+    # observe avant correction). Verifie donc le ratio global apres coup,
+    # les deux fichiers etant maintenant sur disque.
+    #
+    # RAW_TO_DINARS (Production) = 1000, conversion monetaire reelle
+    # (millimes), pas calee sur une reference externe. REGLEMENTS_TO_DINARS
+    # (Sinistres), lui, RESTE calibre sur la reference marche national
+    # (57-63%) -- voir justification detaillee plus haut -- donc ce check
+    # verifie surtout que REGLEMENTS_TO_DINARS n'est pas devenu caduc si les
+    # donnees brutes changent, pas une propriete emergente independante.
+    _prod_out = os.path.join(BASE_DIR, "processed_data", "Production_Cleaned.csv")
+    _sin_out  = os.path.join(BASE_DIR, "processed_data", "Sinistres_Cleaned.csv")
+    if os.path.exists(_prod_out) and os.path.exists(_sin_out):
+        _ca_totale   = pd.read_csv(_prod_out, usecols=['PRIME_NETTE'])['PRIME_NETTE'].sum()
+        _sin_totale  = pd.read_csv(_sin_out, usecols=['REGLEMENTS'])['REGLEMENTS'].sum()
+        _ratio_sp    = _sin_totale / _ca_totale * 100 if _ca_totale > 0 else 0
+        print(f"\n📊 Ratio sinistres/primes agrege : {_ratio_sp:.1f}% "
+              f"(reference marche tunisien, branche auto : 57-63%)")
+        if not (30 <= _ratio_sp <= 90):
+            print(f"⚠️  ATTENTION : ratio S/P agrege = {_ratio_sp:.1f}%, hors de la plage "
+                  f"plausible [30%, 90%] -- revalider REGLEMENTS_TO_DINARS.")
