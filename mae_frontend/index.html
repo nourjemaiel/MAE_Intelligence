@@ -70,7 +70,6 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .sb-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);cursor:pointer;transition:.15s;color:rgba(255,255,255,0.7);font-size:13px;font-weight:500;border:none;background:none;width:100%;text-align:left;flex-shrink:0}
 .sb-item:hover{background:rgba(255,255,255,0.1);color:#fff}
 .sb-item.active{background:rgba(255,255,255,0.18);color:#fff;border:1px solid rgba(255,255,255,0.25)}
-.sb-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
 .sb-footer{padding:14px;border-top:1px solid rgba(255,255,255,0.12);flex-shrink:0}
 .sb-status{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,0.6)}
 .pulse{width:7px;height:7px;border-radius:50%;animation:pulse 2s infinite;flex-shrink:0}
@@ -78,7 +77,6 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 
 /* USER FOOTER */
 .sb-user{display:flex;align-items:center;gap:8px;padding:10px 12px;background:rgba(255,255,255,0.08);border-radius:var(--r);margin-bottom:10px}
-.sb-user-avatar{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
 .sb-user-name{font-size:12px;font-weight:600;color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-user-role{font-size:10px;color:rgba(255,255,255,0.5)}
 .sb-logout{background:none;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.5);padding:4px 8px;border-radius:6px;cursor:pointer;font-size:10px;font-family:inherit;transition:.15s}
@@ -88,7 +86,6 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .hist-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r);cursor:pointer;transition:.15s;color:rgba(255,255,255,0.6);font-size:11.5px;border:1px solid transparent;background:none;width:100%;text-align:left;flex-shrink:0;line-height:1.4}
 .hist-item:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);border-color:rgba(255,255,255,0.12)}
 .hist-item.active-hist{background:rgba(255,255,255,0.13);color:#fff;border-color:rgba(255,255,255,0.2)}
-.hist-icon{font-size:13px;flex-shrink:0;opacity:.7}
 .hist-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hist-del{opacity:0;background:none;border:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:4px;flex-shrink:0;transition:.15s}
 .hist-item:hover .hist-del{opacity:1}
@@ -117,8 +114,7 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:18px 20px;position:relative;overflow:hidden;transition:.2s;box-shadow:var(--shadow)}
 .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--c1,var(--accent)),var(--c2,var(--accent3)))}
 .kpi:hover{border-color:var(--accent3);transform:translateY(-2px);box-shadow:var(--shadow2)}
-.kpi-icon{font-size:22px;margin-bottom:10px}
-.kpi-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;font-weight:600}
+.kpi-label{margin-top:2px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;font-weight:600}
 .kpi-val{font-size:22px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
 .kpi-delta{font-size:11px;color:var(--muted);margin-top:4px}
 .kpi-new{position:absolute;top:10px;right:12px;background:var(--accent-dim);color:var(--accent);font-size:9px;padding:2px 8px;border-radius:20px;font-weight:600;border:1px solid var(--border2);animation:fadeIn .4s ease}
@@ -159,7 +155,6 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .seg-progress-bar{height:100%;border-radius:3px;transition:width .6s ease}
 .seg-progress-label{display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
 .seg-reco{font-size:12px;color:var(--text2);line-height:1.65;display:flex;gap:8px;align-items:flex-start}
-.seg-reco-icon{font-size:14px;flex-shrink:0;margin-top:1px}
 
 /* FORECAST TABLE */
 .model-table{width:100%;border-collapse:collapse;font-size:12px}
@@ -192,6 +187,10 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .dots span:nth-child(3){animation-delay:.4s}
 @keyframes dotBounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
 .msg-error{align-self:flex-start;background:#fff8f0;border:1px solid #fcd34d;padding:12px 14px;border-radius:3px 16px 16px 16px;max-width:85%;font-size:13px;line-height:1.75;color:#92400e}
+.report-btn{display:inline-flex;align-items:center;padding:7px 14px;border-radius:var(--r);font-size:12px;font-weight:600;font-family:inherit;text-decoration:none;cursor:pointer;transition:.15s;background:var(--bg);border:1px solid var(--border);color:var(--text)}
+.report-btn:hover{border-color:var(--accent3);color:var(--accent)}
+.report-btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.report-btn-primary:hover{background:var(--accent-light);color:#fff}
 .agent-side{display:flex;flex-direction:column;gap:12px;overflow-y:auto;padding-bottom:28px}
 .side-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:16px;box-shadow:var(--shadow);flex-shrink:0}
 .side-title{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;font-weight:600}
@@ -204,7 +203,6 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .admin-card-title{font-size:14px;font-weight:700;color:var(--text2);margin-bottom:16px;display:flex;align-items:center;gap:8px}
 .user-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
 .user-row:last-child{border-bottom:none}
-.user-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-dim);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;border:2px solid var(--border2)}
 .user-info{flex:1}
 .user-name{font-size:13px;font-weight:600;color:var(--text)}
 .user-meta{font-size:11px;color:var(--muted);margin-top:2px}
@@ -258,15 +256,32 @@ const API = new URLSearchParams(window.location.search).get("api") || DEFAULT_AP
 const { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area, ComposedChart } = Recharts;
 const CHART_COLORS = ["#1a7a3a","#2ea84f","#4cba6a","#80d498","#b8e8c8","#f59e0b","#d93025","#2563eb"];
 
-// ── AUTH STORE ──────────────────────────────────────────────
-const ADMIN_ACCOUNT = { username:"admin", password:"mae2026", role:"admin", name:"Administrateur" };
-const DEFAULT_DG    = { username:"dg.mae", password:"direction", role:"dg", name:"Direction Générale" };
+// Identite du compte admin fixe (le mot de passe n'est plus verifie cote
+// client -- /api/login s'en charge -- seuls username/name servent encore
+// ici pour l'affichage dans la page Administration).
+const ADMIN_ACCOUNT = { username:"admin", name:"Administrateur" };
 
-function loadUsers() {
-  try { const s=localStorage.getItem("mae_users"); if(s) return JSON.parse(s); } catch(e){}
-  return [DEFAULT_DG];
+// ── AUTH ────────────────────────────────────────────────────
+// Le login est desormais verifie cote SERVEUR (/api/login, voir main.py) --
+// avant, les identifiants etaient en clair dans ce fichier JS (visibles via
+// "Afficher le code source") et AUCUN endpoint ne verifiait quoi que ce
+// soit : n'importe qui pouvait appeler l'API directement sans passer par
+// cette page. apiFetch() attache le jeton recu a la connexion sur CHAQUE
+// appel a l'API -- remplace tous les apiFetch(`${API}...`) directs.
+function apiFetch(url, opts={}) {
+  const token = sessionStorage.getItem("mae_token");
+  const headers = {...(opts.headers||{}), ...(token ? {"Authorization": `Bearer ${token}`} : {})};
+  return fetch(url, {...opts, headers});
 }
-function saveUsers(users){ localStorage.setItem("mae_users", JSON.stringify(users)); }
+// Ajoute le jeton en parametre ?token= pour les liens directs (balises <a>,
+// qui ne peuvent pas porter d'en-tete Authorization personnalise) -- voir
+// les boutons Visualiser/Telecharger des rapports generes par l'agent.
+function withAuthParam(url) {
+  const token = sessionStorage.getItem("mae_token");
+  if (!token) return url;
+  return url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
+}
+
 // Session helpers kept for logout, but we no longer auto-restore on mount
 function clearSession(){ localStorage.removeItem("mae_session"); }
 
@@ -333,19 +348,21 @@ function LoginPage({ onLogin }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(""); setLoading(true);
-    await new Promise(r=>setTimeout(r,400));
-
-    if (username===ADMIN_ACCOUNT.username && password===ADMIN_ACCOUNT.password) {
-      const user = {...ADMIN_ACCOUNT, password:undefined};
-      onLogin(user); setLoading(false); return;
+    try {
+      const res = await apiFetch(`${API}/login`, {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({username, password}),
+      });
+      if (!res.ok) {
+        setError("Identifiant ou mot de passe incorrect.");
+        setLoading(false); return;
+      }
+      const data = await res.json();
+      sessionStorage.setItem("mae_token", data.token);
+      onLogin({username, name: data.name, role: data.role});
+    } catch (e) {
+      setError("Backend injoignable. Vérifiez que le serveur est démarré.");
     }
-    const users = loadUsers();
-    const found = users.find(u=>u.username===username && u.password===password);
-    if (found) {
-      const user = {...found, password:undefined};
-      onLogin(user); setLoading(false); return;
-    }
-    setError("Identifiant ou mot de passe incorrect.");
     setLoading(false);
   };
 
@@ -384,33 +401,48 @@ function LoginPage({ onLogin }) {
 // ADMIN PAGE
 // ════════════════════════════════════════════════════════════
 function AdminPage() {
-  const [users, setUsers]       = useState(loadUsers());
+  // Comptes geres cote SERVEUR desormais (voir main.py /api/admin/users) --
+  // avant, geres uniquement dans le localStorage du navigateur de l'admin
+  // (mots de passe en clair, aucun compte ainsi cree ne pouvait de toute
+  // facon s'authentifier reellement, voir remarque securite).
+  const [users, setUsers]       = useState([]);
   const [newName, setNewName]   = useState("");
   const [newUser, setNewUser]   = useState("");
   const [newPass, setNewPass]   = useState("");
   const [success, setSuccess]   = useState("");
+  const [error, setError]       = useState("");
   const [confirmDel, setConfirmDel] = useState(null);
+
+  const refreshUsers = () => apiFetch(`${API}/admin/users`).then(r=>r.json()).then(setUsers).catch(()=>{});
+  useEffect(()=>{ refreshUsers(); }, []);
 
   const allAccounts = [
     { username:ADMIN_ACCOUNT.username, name:ADMIN_ACCOUNT.name, role:"admin", isFixed:true },
     ...users.map(u=>({...u, isFixed:false}))
   ];
 
-  const addUser = (e) => {
+  const addUser = async (e) => {
     e.preventDefault();
+    setError("");
     if (!newName.trim()||!newUser.trim()||!newPass.trim()) return;
-    if (newPass.length < 6) { alert("Mot de passe minimum 6 caractères."); return; }
-    if (allAccounts.find(u=>u.username===newUser.trim())) { alert("Cet identifiant existe déjà."); return; }
-    const updated = [...users, {username:newUser.trim(), password:newPass, role:"dg", name:newName.trim()}];
-    setUsers(updated); saveUsers(updated);
-    setNewName(""); setNewUser(""); setNewPass("");
-    setSuccess(`✓ Compte « ${newName.trim()} » créé avec succès.`);
-    setTimeout(()=>setSuccess(""),3000);
+    if (newPass.length < 6) { setError("Mot de passe minimum 6 caractères."); return; }
+    try {
+      const res = await apiFetch(`${API}/admin/users`, {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({username:newUser.trim(), password:newPass, name:newName.trim()}),
+      });
+      if (!res.ok) { const d = await res.json().catch(()=>({})); setError(d.detail || "Erreur lors de la création."); return; }
+      await refreshUsers();
+      setNewName(""); setNewUser(""); setNewPass("");
+      setSuccess(`Compte « ${newName.trim()} » créé avec succès.`);
+      setTimeout(()=>setSuccess(""),3000);
+    } catch (e) { setError("Backend injoignable."); }
   };
 
-  const deleteUser = (username) => {
-    const updated = users.filter(u=>u.username!==username);
-    setUsers(updated); saveUsers(updated);
+  const deleteUser = async (username) => {
+    try { await apiFetch(`${API}/admin/users/${encodeURIComponent(username)}`, {method:"DELETE"}); }
+    catch (e) {}
+    await refreshUsers();
     setConfirmDel(null);
   };
 
@@ -438,10 +470,9 @@ function AdminPage() {
       </div>
       <div className="admin-grid">
         <div className="admin-card">
-          <div className="admin-card-title">👥 Comptes actifs ({allAccounts.length})</div>
+          <div className="admin-card-title">Comptes actifs ({allAccounts.length})</div>
           {allAccounts.map(u=>(
             <div key={u.username} className="user-row">
-              <div className="user-avatar">{u.role==="admin"?"🔐":"👤"}</div>
               <div className="user-info">
                 <div className="user-name">{u.name}</div>
                 <div className="user-meta">@{u.username}</div>
@@ -456,8 +487,9 @@ function AdminPage() {
           ))}
         </div>
         <div className="admin-card">
-          <div className="admin-card-title">➕ Ajouter un compte Direction Générale</div>
+          <div className="admin-card-title">Ajouter un compte Direction Générale</div>
           {success && <div className="form-success">{success}</div>}
+          {error && <div className="login-error">{error}</div>}
           <form className="add-user-form" onSubmit={addUser}>
             <div className="form-field">
               <label className="form-label">Nom complet</label>
@@ -536,7 +568,7 @@ function Filters({ filters, values, onChange, onReset }) {
         ))}
       </select>
 
-      <button className="filters-reset" onClick={onReset}>✕ Réinitialiser</button>
+      <button className="filters-reset" onClick={onReset}>Réinitialiser</button>
     </div>
   );
 }
@@ -581,13 +613,13 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
   const fetchAll=useCallback(async()=>{
     try{
       const[k,a,b,m,p,f,fil]=await Promise.all([
-        fetch(`${API}/kpis?${qs}`).then(r=>r.json()),
-        fetch(`${API}/ca-by-agence?${qs}`).then(r=>r.json()),
-        fetch(`${API}/ca-by-branche?${qs}`).then(r=>r.json()),
-        fetch(`${API}/ca-by-month?${qs}`).then(r=>r.json()),
-        fetch(`${API}/profil-clients?${qs}`).then(r=>r.json()),
-        fetch(`${API}/live-feed?limit=8`).then(r=>r.json()),
-        fetch(`${API}/filters`).then(r=>r.json()),
+        apiFetch(`${API}/kpis?${qs}`).then(r=>r.json()),
+        apiFetch(`${API}/ca-by-agence?${qs}`).then(r=>r.json()),
+        apiFetch(`${API}/ca-by-branche?${qs}`).then(r=>r.json()),
+        apiFetch(`${API}/ca-by-month?${qs}`).then(r=>r.json()),
+        apiFetch(`${API}/profil-clients?${qs}`).then(r=>r.json()),
+        apiFetch(`${API}/live-feed?limit=8`).then(r=>r.json()),
+        apiFetch(`${API}/filters`).then(r=>r.json()),
       ]);
       if(k.total_generated>prevCount){setIsNew(true);setTimeout(()=>setIsNew(false),2500);}
       setPrev(k.total_generated||0);
@@ -599,12 +631,12 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
   useEffect(()=>{fetchAll();const t=setInterval(fetchAll,5000);return()=>clearInterval(t);},[fetchAll]);
 
   const kpiList=kpis?[
-    {label:"Chiffre d'Affaires",val:fmtTND(kpis.ca_total),delta:"+4.7% vs 2024",icon:"💰",c1:"#1a7a3a",c2:"#4cba6a"},
-    {label:"Clients Actifs",val:(kpis.nb_clients||0).toLocaleString(),delta:`${kpis.nb_contrats||0} contrats`,icon:"👥",c1:"#2563eb",c2:"#60a5fa"},
-    {label:"Sinistres",val:fmtTND(kpis.sin_total),delta:`Ratio: ${(kpis.ratio_sin||0).toFixed(1)}%`,icon:"🚗",c1:"#d93025",c2:"#f59e0b"},
-    {label:"Marge Technique",val:fmtTND(kpis.marge_technique_brute||0),delta:"Brute, avant frais",icon:"📈",c1:"#156b32",c2:"#1a7a3a"},
-    {label:"Top Agence",val:String(kpis.top_agence||"—").split(" ").slice(0,2).join(" "),delta:fmtTND(kpis.top_agence_ca||0),icon:"🏆",c1:"#f59e0b",c2:"#1a7a3a"},
-    {label:"Générés (live)",val:(kpis.total_generated||0).toLocaleString(),delta:"Toutes les 5s",icon:"⚡",c1:"#2ea84f",c2:"#4cba6a"},
+    {label:"Chiffre d'Affaires",val:fmtTND(kpis.ca_total),delta:kpis.nb_contrats?`${fmtTND(kpis.ca_total/kpis.nb_contrats)} / contrat`:"—",c1:"#1a7a3a",c2:"#4cba6a"},
+    {label:"Clients Actifs",val:String(kpis.nb_clients||0),delta:`${kpis.nb_contrats||0} contrats`,c1:"#2563eb",c2:"#60a5fa"},
+    {label:"Sinistres",val:fmtTND(kpis.sin_total),delta:`Ratio: ${(kpis.ratio_sin||0).toFixed(1)}%`,c1:"#d93025",c2:"#f59e0b"},
+    {label:"Marge Technique",val:fmtTND(kpis.marge_technique_brute||0),delta:"Brute, avant frais",c1:"#156b32",c2:"#1a7a3a"},
+    {label:"Top Agence",val:String(kpis.top_agence||"—").split(" ").slice(0,2).join(" "),delta:fmtTND(kpis.top_agence_ca||0),c1:"#f59e0b",c2:"#1a7a3a"},
+    {label:"Générés (live)",val:(kpis.total_generated||0).toLocaleString(),delta:"Toutes les 5s",c1:"#2ea84f",c2:"#4cba6a"},
   ]:[];
 
   const ageData=Object.entries(pData.age_bins||{}).map(([n,v])=>({name:n,value:v}));
@@ -615,14 +647,13 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
       <div className="ph">
         <div className="ph-title">Tableau de Bord</div>
         <div className="ph-sub">
-          Vue d'ensemble du portefeuille MAE — Exercice 2025
-          {isNew&&<span className="update-tag">⚡ Nouveau contrat</span>}
+          Vue d'ensemble du portefeuille MAE — 12 derniers mois
+          {isNew&&<span className="update-tag">Nouveau contrat</span>}
         </div>
       </div>
       <div className="kpi-grid">
         {kpiList.map((k,i)=>(
           <div key={i} className="kpi" style={{"--c1":k.c1,"--c2":k.c2}}>
-            <div className="kpi-icon">{k.icon}</div>
             <div className="kpi-label">{k.label}</div>
             <div className="kpi-val">{k.val}</div>
             <div className="kpi-delta">{k.delta}</div>
@@ -632,7 +663,7 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
       </div>
       <div className="chart-grid cols-2" style={{marginBottom:16}}>
         <div className="chart-card">
-          <div className="chart-title">🏢 Top 10 Agences par CA</div>
+          <div className="chart-title">Top 10 Agences par CA</div>
           <div className="chart-sub">Chiffre d'affaires en TND</div>
           <div style={{height:300}}>
             <ResponsiveContainer width="100%" height="100%">
@@ -649,25 +680,40 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
           </div>
         </div>
         <div className="chart-card">
-          <div className="chart-title">🗂 Répartition par Branche</div>
+          <div className="chart-title">Répartition par Branche</div>
           <div className="chart-sub">Part du chiffre d'affaires</div>
           <div style={{height:300}}>
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={brData} dataKey="ca" nameKey="branche" cx="50%" cy="50%"
-                  innerRadius={65} outerRadius={105} paddingAngle={3}
-                  label={({branche,part})=>`${branche} ${part}%`} labelLine={{stroke:"#d4e8d4"}}>
-                  {brData.map((_,i)=><Cell key={i} fill={CHART_COLORS[i%CHART_COLORS.length]}/>)}
-                </Pie>
-                <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
-              </PieChart>
+              {(() => {
+                // 18 branches avec des labels en ligne se chevauchaient toutes
+                // (la vraie repartition a une longue traine : Tourisme a lui
+                // seul = ~71%, puis 17 branches restantes sous les 18%
+                // chacune) -- regroupe les branches au-dela des 5 premieres
+                // dans "Autres" pour un graphique lisible, plutot que
+                // d'afficher 18 etiquettes qui se superposent forcement.
+                const sorted = [...brData].sort((a,b)=>b.ca-a.ca);
+                const top = sorted.slice(0,5);
+                const reste = sorted.slice(5);
+                const autresCa = reste.reduce((s,r)=>s+r.ca,0);
+                const pieData = autresCa>0 ? [...top,{branche:`Autres (${reste.length})`,ca:autresCa,part:Math.round(autresCa/sorted.reduce((s,r)=>s+r.ca,0)*1000)/10}] : top;
+                return (
+                  <PieChart>
+                    <Pie data={pieData} dataKey="ca" nameKey="branche" cx="50%" cy="50%"
+                      innerRadius={65} outerRadius={105} paddingAngle={3}
+                      label={({branche,part})=>`${branche} ${part}%`} labelLine={{stroke:"#d4e8d4"}}>
+                      {pieData.map((_,i)=><Cell key={i} fill={CHART_COLORS[i%CHART_COLORS.length]}/>)}
+                    </Pie>
+                    <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
+                  </PieChart>
+                );
+              })()}
             </ResponsiveContainer>
           </div>
         </div>
       </div>
       <div className="chart-grid cols-2" style={{marginBottom:16}}>
         <div className="chart-card">
-          <div className="chart-title">📈 Évolution Mensuelle 2025</div>
+          <div className="chart-title">Évolution Mensuelle</div>
           <div className="chart-sub">Primes collectées vs sinistres réglés</div>
           <div style={{height:260}}>
             <ResponsiveContainer width="100%" height="100%">
@@ -684,7 +730,7 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
           </div>
         </div>
         <div className="chart-card">
-          <div className="chart-title">👤 Profil Clients</div>
+          <div className="chart-title">Profil Clients</div>
           <div className="chart-sub">Répartition par tranche d'âge et CSP</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,height:260}}>
             <div>
@@ -715,7 +761,7 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
         </div>
       </div>
       <div className="chart-card">
-        <div className="chart-title">⚡ Flux en temps réel<span className="update-tag" style={{marginLeft:"auto"}}>Auto-refresh 5s</span></div>
+        <div className="chart-title">Flux en temps réel<span className="update-tag" style={{marginLeft:"auto"}}>Auto-refresh 5s</span></div>
         <div className="chart-sub">Derniers contrats enregistrés dans le système</div>
         <LiveFeed feed={feed}/>
       </div>
@@ -728,8 +774,12 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
 // ═══════════════════════════════════════════════════════════════
 function Forecast() {
   const [data,setData]=useState([]);
-  useEffect(()=>{fetch(`${API}/forecast`).then(r=>r.json()).then(setData).catch(()=>{});},[]);
+  useEffect(()=>{apiFetch(`${API}/forecast`).then(r=>r.json()).then(setData).catch(()=>{});},[]);
   const totalPrev=data.reduce((s,r)=>s+r.ca_prev,0);
+  const totalReel=data.reduce((s,r)=>s+(r.ca_reel||0),0);
+  // Croissance calculee cote client a partir des memes 12 mois reels/prevus
+  // renvoyes par /api/forecast, pas un pourcentage fixe affiche en dur.
+  const growthPct = totalReel>0 ? Math.round((totalPrev/totalReel-1)*1000)/10 : null;
   const maxMois=data.reduce((b,r)=>r.ca_prev>b.ca_prev?r:b,{ca_prev:0}).mois||"—";
   const minMois=data.reduce((b,r)=>r.ca_prev<b.ca_prev?r:b,{ca_prev:Infinity}).mois||"—";
   // Intervalle de confiance DYNAMIQUE (s'élargit avec l'horizon, voir ci_width_for_month
@@ -742,18 +792,17 @@ function Forecast() {
   return (
     <div className="page">
       <div className="ph">
-        <div className="ph-title">Prévisions 2026</div>
-        <div className="ph-sub">Modèle de Régression Linéaire Saisonnière · Croissance prévue +4.7%</div>
+        <div className="ph-title">Prévisions — 12 prochains mois</div>
+        <div className="ph-sub">Modèle Prophet · Croissance prévue {growthPct!=null?`${growthPct>=0?"+":""}${growthPct}%`:"—"}</div>
       </div>
       <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
         {[
-          {label:"CA Total Prévu 2026", val:fmtTND(totalPrev),   delta:"vs 2025: +4.7%",    icon:"📈"},
-          {label:"Mois le + fort",      val:maxMois,              delta:"Pic saisonnier",     icon:"🚀"},
-          {label:"Mois le + faible",    val:minMois,              delta:"Creux saisonnier",   icon:"📉"},
-          {label:"Intervalle confiance",val:"95%",                delta:(ciFirst!=null&&ciLast!=null)?`±${ciFirst}% (Jan) → ±${ciLast}% (Déc)`:"—", icon:"🎯"},
+          {label:"CA Total Prévu", val:fmtTND(totalPrev),   delta:growthPct!=null?`vs 12 mois précédents: ${growthPct>=0?"+":""}${growthPct}%`:"—"},
+          {label:"Mois le + fort",      val:maxMois,              delta:"Pic saisonnier"},
+          {label:"Mois le + faible",    val:minMois,              delta:"Creux saisonnier"},
+          {label:"Intervalle confiance",val:"95%",                delta:(ciFirst!=null&&ciLast!=null)?`±${ciFirst}% (Jan) → ±${ciLast}% (Déc)`:"—"},
         ].map((k,i)=>(
           <div key={i} className="kpi">
-            <div className="kpi-icon">{k.icon}</div>
             <div className="kpi-label">{k.label}</div>
             <div className="kpi-val" style={{fontSize:20}}>{k.val}</div>
             <div className="kpi-delta">{k.delta}</div>
@@ -761,61 +810,31 @@ function Forecast() {
         ))}
       </div>
       <div className="chart-card" style={{marginBottom:16}}>
-        <div className="chart-title">📊 Prévision CA mensuelle — Intervalle de Confiance 95%</div>
-        <div className="chart-sub">Régression Linéaire Saisonnière — données réelles 2025 vs prévisions 2026</div>
+        <div className="chart-title">Prévision CA mensuelle — Intervalle de Confiance 95%</div>
+        <div className="chart-sub">Modèle Prophet — données réelles vs prévisions (12 prochains mois)</div>
         <div style={{height:380}}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{left:10,right:20,top:10,bottom:0}}>
-              <defs>
-                <linearGradient id="gradCI" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1a7a3a" stopOpacity={0.1}/>
-                  <stop offset="95%" stopColor="#1a7a3a" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4"/>
               <XAxis dataKey="mois" tick={{fill:"#6b8f6b",fontSize:11}} axisLine={false} tickLine={false}/>
               <YAxis tick={{fill:"#6b8f6b",fontSize:11}} tickFormatter={v=>fmtM(v)} axisLine={false} tickLine={false}/>
               <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
               <Legend wrapperStyle={{fontSize:11,color:"#6b8f6b"}}/>
-              <Area dataKey="ci_high" name="CI Haut" stroke="none" fill="url(#gradCI)" legendType="none"/>
-              <Area dataKey="ci_low"  name="CI Bas"  stroke="none" fill="#f0f4f0"      legendType="none"/>
-              <Line type="monotone" dataKey="ca_prev" name="CA Prévu 2026" stroke="#1a7a3a" strokeWidth={2.5}
+              {/* Bande d'intervalle de confiance : une aire invisible jusqu'a ci_low
+                  qui sert de socle, empilee (stackId) sous une aire visible de hauteur
+                  (ci_high - ci_low) -- rendu robuste, ne depend pas de faire correspondre
+                  une couleur "gomme" au fond de la carte (l'ancienne technique etait
+                  invisible car elle s'appuyait sur cette correspondance). */}
+              <Area dataKey="ci_low" stackId="ci" name="Borne basse" stroke="none" fill="transparent" legendType="none"/>
+              <Area dataKey={d => Math.max(0, d.ci_high - d.ci_low)} stackId="ci" name="Intervalle de confiance"
+                stroke="none" fill="#1a7a3a" fillOpacity={0.18}/>
+              <Line type="monotone" dataKey="ca_prev" name="CA Prévu" stroke="#1a7a3a" strokeWidth={2.5}
                 dot={{r:4,fill:"#1a7a3a",strokeWidth:2,stroke:"#fff"}} activeDot={{r:6}}/>
-              <Line type="monotone" dataKey="ca_reel" name="CA Réel 2025" stroke="#8aac8a" strokeWidth={2}
+              <Line type="monotone" dataKey="ca_reel" name="CA Réel" stroke="#8aac8a" strokeWidth={2}
                 strokeDasharray="5 3" dot={{r:3,fill:"#8aac8a"}}/>
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      </div>
-      <div className="chart-card">
-        <div className="chart-title">📋 Tableau des Prévisions Mensuelles</div>
-        <div className="chart-sub">Valeurs prévisionnelles avec intervalles de confiance à 95%</div>
-        <table className="model-table">
-          <thead>
-            <tr>
-              <th>Mois</th><th>CA Réel 2025</th><th>CA Prévu 2026</th>
-              <th>Borne Inférieure</th><th>Borne Supérieure</th><th>Évolution</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r,i)=>{
-              const evol = r.ca_reel>0 ? ((r.ca_prev-r.ca_reel)/r.ca_reel*100).toFixed(1) : "—";
-              const evolColor = parseFloat(evol)>=0 ? "var(--accent)" : "var(--danger)";
-              return (
-                <tr key={i}>
-                  <td style={{color:"var(--accent2)",fontWeight:600}}>{r.mois}</td>
-                  <td style={{fontFamily:"'JetBrains Mono',monospace",color:"var(--muted)"}}>{fmtTND(r.ca_reel)}</td>
-                  <td style={{fontFamily:"'JetBrains Mono',monospace",color:"var(--accent)",fontWeight:600}}>{fmtTND(r.ca_prev)}</td>
-                  <td style={{fontFamily:"'JetBrains Mono',monospace",color:"var(--muted)",fontSize:11}}>{fmtTND(r.ci_low)}</td>
-                  <td style={{fontFamily:"'JetBrains Mono',monospace",color:"var(--muted)",fontSize:11}}>{fmtTND(r.ci_high)}</td>
-                  <td style={{fontFamily:"'JetBrains Mono',monospace",color:evolColor,fontWeight:600}}>
-                    {evol !== "—" ? (parseFloat(evol)>=0?"+":"")+evol+"%" : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
       </div>
     </div>
   );
@@ -826,14 +845,26 @@ function Forecast() {
 // ═══════════════════════════════════════════════════════════════
 function Segmentation() {
   const [segs,setSegs]=useState([]);
-  useEffect(()=>{fetch(`${API}/segments`).then(r=>r.json()).then(setSegs).catch(()=>{});},[]);
-  const total=segs.reduce((s,r)=>s+r.count,0)||72674;
+  useEffect(()=>{apiFetch(`${API}/segments`).then(r=>r.json()).then(setSegs).catch(()=>{});},[]);
+  const total=segs.reduce((s,r)=>s+r.count,0);
 
+  // Cle recherchee en sous-chaine (pas egalite stricte) : les noms reels
+  // sont "Client Premium", "Client a Risque", etc. -- et le nombre de
+  // segments depend du clustering (k n'est plus fige), donc les segments
+  // sans profil-type reconnu retombent sur DEFAULT_SEG_CFG.
   const SEG_CONFIG = {
-    "Premium":    {icon:"👑", reco:"Déployer un programme de fidélisation VIP avec un manager dédié. Proposer des offres multi-contrats exclusives et des avantages premium pour renforcer la rétention de ce segment hautement rentable.", actions:["Programme VIP","Manager dédié","Offres exclusives"]},
-    "Standard":   {icon:"⭐", reco:"Lancer des campagnes d'upselling vers des garanties complètes. Proposer des incentives pour réduire le bonus-malus et encourager la souscription de contrats additionnels.", actions:["Upselling garanties","Réduction BM","Multi-véhicules"]},
-    "Occasionnel":{icon:"🔄", reco:"Mettre en place une campagne de fidélisation ciblée avec des offres packagées attractives. Digitaliser le parcours client pour faciliter la souscription et réduire le taux d'attrition.", actions:["Campagne fidélisation","Offres packagées","Digitalisation"]},
-    "A Risque":   {icon:"⚠️", reco:"Réviser la politique tarifaire pour ce segment prioritaire. Renforcer les contrôles de souscription et mettre en place un programme de prévention des sinistres pour réduire la sinistralité.", actions:["Révision tarifaire","Contrôle souscription","Prévention sinistres"]},
+    "Premium":    {reco:"Déployer un programme de fidélisation VIP avec un manager dédié. Proposer des offres multi-contrats exclusives et des avantages premium pour renforcer la rétention de ce segment hautement rentable.", actions:["Programme VIP","Manager dédié","Offres exclusives"]},
+    "Grand Contrat":{reco:"Peu de contrats mais à forte prime unitaire — soigner la relation individuelle plutôt que le volume. Proposer un point de contact dédié au renouvellement pour sécuriser ce contrat à forte valeur.", actions:["Suivi individualisé","Renouvellement prioritaire"]},
+    "Capital Eleve":{reco:"Capital assuré nettement supérieur à la moyenne — vérifier que la tarification reflète bien l'exposition réelle. Prioriser ce segment pour une revue de couverture.", actions:["Revue de couverture","Vérification tarifaire"]},
+    "Economique": {reco:"Segment le plus large, prime et durée de contrat les plus faibles — fort potentiel de volume. Digitaliser le parcours pour réduire le coût d'acquisition et de gestion.", actions:["Digitalisation","Offres packagées"]},
+    "Feminine":   {reco:"Segment démographiquement distinct — analyser les garanties les plus souscrites pour adapter la communication et l'offre.", actions:["Analyse des garanties souscrites"]},
+    "Fidele":     {reco:"Durée de contrat la plus longue du portefeuille — base de clientèle stable. Maintenir la relation avec un programme de reconnaissance de fidélité.", actions:["Programme de fidélité","Renouvellement facilité"]},
+    "Risque":     {reco:"Ratio sinistres/primes le plus élevé du portefeuille. Réviser la politique tarifaire, renforcer les contrôles de souscription et mettre en place une prévention ciblée des sinistres.", actions:["Révision tarifaire","Contrôle souscription","Prévention sinistres"]},
+  };
+  const DEFAULT_SEG_CFG = {reco:"Segment identifié par le clustering sans profil-type prédéfini — analyser son profil (CA, bonus-malus, contrats) pour une stratégie dédiée.", actions:["Analyse du profil"]};
+  const getCfg = (name) => {
+    const key = Object.keys(SEG_CONFIG).find(k => name.includes(k));
+    return key ? SEG_CONFIG[key] : DEFAULT_SEG_CFG;
   };
 
   const pieData=segs.map(s=>({name:s.segment,value:s.count}));
@@ -842,11 +873,11 @@ function Segmentation() {
     <div className="page">
       <div className="ph">
         <div className="ph-title">Segmentation Clients</div>
-        <div className="ph-sub">K-Means Clustering + PCA — 4 segments identifiés sur 72 674 clients actifs</div>
+        <div className="ph-sub">K-Means Clustering + PCA — {segs.length} segments identifiés sur {total.toLocaleString()} clients actifs</div>
       </div>
       <div className="chart-grid cols-2" style={{marginBottom:24}}>
         <div className="chart-card">
-          <div className="chart-title">🥧 Répartition du Portefeuille</div>
+          <div className="chart-title">Répartition du Portefeuille</div>
           <div style={{height:300}}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -861,12 +892,13 @@ function Segmentation() {
           </div>
         </div>
         <div className="chart-card">
-          <div className="chart-title">💰 CA Moyen par Segment (TND)</div>
+          <div className="chart-title">CA Moyen par Segment (TND)</div>
           <div style={{height:300}}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={segs} margin={{left:0,right:20,top:10,bottom:0}}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4" vertical={false}/>
-                <XAxis dataKey="segment" tick={{fill:"#2d4a2d",fontSize:11}} axisLine={false} tickLine={false}/>
+                <XAxis dataKey="segment" tick={{fill:"#2d4a2d",fontSize:10}} axisLine={false} tickLine={false}
+                  interval={0} angle={-20} textAnchor="end" height={70}/>
                 <YAxis tick={{fill:"#6b8f6b",fontSize:10}} tickFormatter={v=>fmtM(v)} axisLine={false} tickLine={false}/>
                 <Tooltip content={<TT/>} formatter={v=>fmtTND(v)}/>
                 <Bar dataKey="ca_moyen" name="CA Moyen" radius={[6,6,0,0]}>
@@ -880,7 +912,7 @@ function Segmentation() {
       <div className="section-title">Profils Détaillés & Recommandations Stratégiques</div>
       <div className="seg-grid">
         {segs.map((s,i)=>{
-          const cfg = SEG_CONFIG[s.segment] || {};
+          const cfg = getCfg(s.segment);
           const pct = ((s.count/total)*100).toFixed(1);
           const riskColor = (s.risque==="Eleve"||s.risque==="Élevé") ? "var(--danger)"
                           : (s.risque==="Modere"||s.risque==="Modéré") ? "var(--warn)"
@@ -891,7 +923,6 @@ function Segmentation() {
               <div className="seg-card-header">
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:22}}>{cfg.icon}</span>
                     <div className="seg-name" style={{color:s.color}}>{s.segment}</div>
                   </div>
                   <span className="seg-badge" style={{background:s.color+"18",color:s.color,border:`1px solid ${s.color}35`}}>
@@ -932,13 +963,142 @@ function Segmentation() {
               </div>
               <div className="seg-card-footer">
                 <div className="seg-reco">
-                  <span className="seg-reco-icon">💡</span>
                   <span style={{color:"var(--text2)",fontSize:12,lineHeight:1.65}}>{cfg.reco}</span>
                 </div>
               </div>
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SINISTRES & RISQUE
+// ═══════════════════════════════════════════════════════════════
+const MOIS_ABBR=["Jan","Fev","Mar","Avr","Mai","Jun","Jul","Aou","Sep","Oct","Nov","Dec"];
+
+function SinistresRisque() {
+  const [stats,setStats]=useState(null);
+  const [agences,setAgences]=useState([]);
+  const [riskData,setRiskData]=useState(null);
+  const [anomalies,setAnomalies]=useState(null);
+  const [accidentsFc,setAccidentsFc]=useState([]);
+
+  useEffect(()=>{
+    apiFetch(`${API}/sinistres-stats`).then(r=>r.json()).then(setStats).catch(()=>{});
+    apiFetch(`${API}/compare-agencies`).then(r=>r.json()).then(setAgences).catch(()=>{});
+    apiFetch(`${API}/risk-clients?n=15`).then(r=>r.json()).then(setRiskData).catch(()=>{});
+    apiFetch(`${API}/anomalies`).then(r=>r.json()).then(setAnomalies).catch(()=>{});
+    apiFetch(`${API}/accidents-forecast`).then(r=>r.json()).then(setAccidentsFc).catch(()=>{});
+  },[]);
+
+  const topAgences = [...agences].sort((a,b)=>b.ratio_sp_pct-a.ratio_sp_pct).slice(0,10);
+
+  const kpis = stats ? [
+    {label:"Sinistres enregistrés", val:(stats.total_sinistres||0).toLocaleString()},
+    {label:"Montant total réglé",   val:fmtTND(stats.montant_total)},
+    {label:"Montant moyen / sinistre", val:fmtTND(stats.montant_moyen)},
+    {label:"En cours de traitement", val:(stats.en_cours||0).toLocaleString()},
+    {label:"Mois le plus chargé",   val:MOIS_ABBR[(stats.pic_mois||1)-1]||"—"},
+  ] : [];
+
+  return (
+    <div className="page">
+      <div className="ph">
+        <div className="ph-title">Sinistres & Risque</div>
+        <div className="ph-sub">Analyse des sinistres, comparaison agences et détection de clients à risque</div>
+      </div>
+
+      <div className="kpi-grid" style={{gridTemplateColumns:"repeat(5,1fr)",marginBottom:24}}>
+        {kpis.map((k,i)=>(
+          <div key={i} className="kpi">
+            <div className="kpi-label">{k.label}</div>
+            <div className="kpi-val" style={{fontSize:20}}>{k.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="chart-grid cols-2" style={{marginBottom:24}}>
+        <div className="chart-card">
+          <div className="chart-title">Ratio Sinistres/Primes par Agence</div>
+          <div className="chart-sub">Top 10 des agences par ratio S/P — plus haut = plus sinistré relativement au CA</div>
+          <div style={{height:320}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topAgences} layout="vertical" margin={{left:10,right:30,top:0,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4" horizontal={false}/>
+                <XAxis type="number" tick={{fill:"#6b8f6b",fontSize:10}} tickFormatter={v=>`${v}%`} axisLine={false} tickLine={false}/>
+                <YAxis type="category" dataKey="agence" tick={{fill:"#2d4a2d",fontSize:11}} width={95} axisLine={false} tickLine={false}/>
+                <Tooltip content={<TT/>} formatter={v=>`${v}%`}/>
+                <Bar dataKey="ratio_sp_pct" name="Ratio S/P" radius={[0,5,5,0]}>
+                  {topAgences.map((a,i)=><Cell key={i} fill={a.ratio_sp_pct>80?"#d93025":"#1a7a3a"}/>)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="chart-card">
+          <div className="chart-title">Alertes détectées</div>
+          <div className="chart-sub">{anomalies?`${anomalies.total_alertes} alerte(s) au total`:"Chargement..."}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:12}}>
+            {(anomalies?.anomalies||[]).map((a,i)=>(
+              <div key={i} style={{padding:"12px 14px",borderRadius:10,
+                background:a.count>0?"#fff0f0":"#f0f9f2",
+                border:`1px solid ${a.count>0?"#fca5a5":"#b8d8b8"}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{a.type}</span>
+                  <span style={{fontSize:16,fontWeight:700,color:a.count>0?"#d93025":"#1a7a3a"}}>{a.count}</span>
+                </div>
+                {a.montant_max>0 && <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Montant max : {fmtTND(a.montant_max)}</div>}
+                {a.ratio_moyen>0 && <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Ratio S/P moyen : {a.ratio_moyen}%</div>}
+                {a.agences?.length>0 && <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>{a.agences.join(", ")}</div>}
+              </div>
+            ))}
+            {anomalies && anomalies.anomalies.length===0 && <div className="empty">Aucune alerte.</div>}
+          </div>
+        </div>
+      </div>
+
+      <div className="chart-grid cols-2" style={{marginBottom:24}}>
+        <div className="chart-card">
+          <div className="chart-title">Clients à Risque par Agence</div>
+          <div className="chart-sub">
+            {riskData ? `${riskData.total_clients_a_risque} client(s) à risque sur ${riskData.nb_clients_analyses} analysés (ratio S/P > ${riskData.seuil_ratio_sp_pct}%)` : "Chargement..."}
+          </div>
+          <div style={{height:260}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={riskData?.par_agence||[]} layout="vertical" margin={{left:10,right:30,top:10,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4" horizontal={false}/>
+                <XAxis type="number" tick={{fill:"#6b8f6b",fontSize:10}} allowDecimals={false} axisLine={false} tickLine={false}/>
+                <YAxis type="category" dataKey="agence" tick={{fill:"#2d4a2d",fontSize:11}} width={95} axisLine={false} tickLine={false}/>
+                <Tooltip content={<TT/>}/>
+                <Bar dataKey="nb_clients_risque" name="Clients à risque" radius={[0,5,5,0]} fill="#d93025"/>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="chart-card">
+          <div className="chart-title">Nombre d'Accidents Prévu par Mois</div>
+          <div className="chart-sub">
+            {accidentsFc.length>0 ? `${accidentsFc.reduce((s,r)=>s+r.accidents,0).toLocaleString()} accidents prévus sur les 12 prochains mois` : "Chargement..."}
+          </div>
+          <div style={{height:260}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={accidentsFc} margin={{left:10,right:20,top:10,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d4e8d4"/>
+                <XAxis dataKey="mois" tick={{fill:"#6b8f6b",fontSize:11}} axisLine={false} tickLine={false}/>
+                <YAxis tick={{fill:"#6b8f6b",fontSize:11}} axisLine={false} tickLine={false} domain={[dataMin => Math.max(0, dataMin - 50), dataMax => dataMax + 50]}/>
+                <Tooltip content={<TT/>}/>
+                <Area dataKey="borne_basse" stackId="ci" name="Borne basse" stroke="none" fill="transparent" legendType="none"/>
+                <Area dataKey={d => d.borne_haute - d.borne_basse} stackId="ci" name="Intervalle de confiance"
+                  stroke="none" fill="#d93025" fillOpacity={0.12}/>
+                <Line type="monotone" dataKey="accidents" name="Accidents prévus" stroke="#d93025" strokeWidth={2.5}
+                  dot={{r:4,fill:"#d93025",strokeWidth:2,stroke:"#fff"}} activeDot={{r:6}}/>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -957,7 +1117,7 @@ function Agent({ conversations, activeConvId, onNewChat, onSelectConv, onDeleteC
 
   const SUGGESTIONS=[
     "Résume le portefeuille MAE en temps réel",
-    "Quel est le CA prévu pour juin 2026 ?",
+    "Quel est le CA prévu pour juin ?",
     "Analyse les risques du portefeuille",
     "Compare les performances des agences",
     "Quels clients sont à risque ?",
@@ -974,19 +1134,19 @@ function Agent({ conversations, activeConvId, onNewChat, onSelectConv, onDeleteC
     onUpdateConv(convId,updatedMsgs,apiHistory);
     setInput("");setLoading(true);
     try{
-      const res=await fetch(`${API}/agent`,{method:"POST",headers:{"Content-Type":"application/json"},
+      const res=await apiFetch(`${API}/agent`,{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({message:text,history:apiHistory})});
       const data=await res.json();
       let answer=data.answer||"";
       const isRL=answer.includes("rate_limit")||answer.includes("429")||answer.includes("Rate limit");
-      if(isRL) answer="⏳ **Limite de requêtes atteinte.**\n\nVeuillez patienter quelques secondes avant de réessayer.";
+      if(isRL) answer="**Le modèle local n'a pas pu répondre.**\n\nIl est peut-être occupé ou en cours de rechargement en mémoire. Veuillez patienter quelques secondes avant de réessayer.";
       const newH=[...apiHistory,{role:"user",content:text},{role:"assistant",content:answer}];
       const addM=[];
       if(data.tool_calls?.length>0) addM.push({type:"tools_used",tools:[...new Set(data.tool_calls.map(t=>t.tool))]});
       addM.push({type:isRL?"error":"ai",text:answer});
       onUpdateConv(convId,[...updatedMsgs,...addM],newH);
     }catch(e){
-      onUpdateConv(convId,[...updatedMsgs,{type:"error",text:"⚠️ Erreur de connexion. Vérifiez que FastAPI tourne sur le port 8000."}],apiHistory);
+      onUpdateConv(convId,[...updatedMsgs,{type:"error",text:"Erreur de connexion. Vérifiez que FastAPI tourne sur le port 8000."}],apiHistory);
     }
     setLoading(false);
   };
@@ -999,7 +1159,7 @@ function Agent({ conversations, activeConvId, onNewChat, onSelectConv, onDeleteC
         <div className="chat-pane">
           <div className="chat-header">
             <span className="chat-header-title">{activeConv?activeConv.title:"Nouvelle conversation"}</span>
-            <button className="chat-header-new" onClick={()=>onNewChat(null)}>✦ Nouvelle conversation</button>
+            <button className="chat-header-new" onClick={()=>onNewChat(null)}>Nouvelle conversation</button>
           </div>
           <div className="chat-msgs">
             {msgs.length===0&&(
@@ -1013,11 +1173,33 @@ function Agent({ conversations, activeConvId, onNewChat, onSelectConv, onDeleteC
               if(m.type==="user") return <div key={i} className="msg-user">{m.text}</div>;
               if(m.type==="tools_used") return (
                 <div key={i} className="msg-tools">
-                  {m.tools.map(t=><span key={t} className="tool-badge">⚙ {t}</span>)}
+                  {m.tools.map(t=><span key={t} className="tool-badge">{t}</span>)}
                 </div>
               );
               if(m.type==="error") return <div key={i} className="msg-error" dangerouslySetInnerHTML={{__html:m.text.replace(/\n/g,"<br/>").replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>")}}/>;
-              if(m.type==="ai") return <div key={i} className="msg-ai" dangerouslySetInnerHTML={{__html:m.text.replace(/\n/g,"<br/>").replace(/\*\*(.*?)\*\*/g,"<strong style='color:var(--accent2)'>$1</strong>").replace(/^###\s(.+)/gm,"<strong style='color:var(--accent);font-size:14px'>$1</strong>")}}/>;
+              if(m.type==="ai") {
+                // Detecte un lien de rapport genere (/api/reports/xxx.pdf|xlsx) dans la
+                // reponse et l'extrait du texte pour l'afficher comme boutons Visualiser/
+                // Telecharger plutot qu'un lien brut a copier (remarque superviseur : pas
+                // de bouton view/download, juste un lien a copier ou un telechargement
+                // automatique dans le dossier reports/).
+                const reportMatch = m.text.match(/https?:\/\/\S+\/api\/reports\/[^\s)]+\.(pdf|xlsx)/i);
+                const reportUrl = reportMatch ? reportMatch[0] : null;
+                const cleanText = reportUrl
+                  ? m.text.replace(reportUrl, "").replace(/Rapport généré\s*:?\s*$/im, "").trim()
+                  : m.text;
+                return (
+                  <div key={i}>
+                    <div className="msg-ai" dangerouslySetInnerHTML={{__html:cleanText.replace(/\n/g,"<br/>").replace(/\*\*(.*?)\*\*/g,"<strong style='color:var(--accent2)'>$1</strong>").replace(/^###\s(.+)/gm,"<strong style='color:var(--accent);font-size:14px'>$1</strong>")}}/>
+                    {reportUrl && (
+                      <div style={{display:"flex",gap:8,marginTop:8}}>
+                        <a href={withAuthParam(`${reportUrl}?inline=true`)} target="_blank" rel="noopener noreferrer" className="report-btn">Visualiser</a>
+                        <a href={withAuthParam(reportUrl)} download className="report-btn report-btn-primary">Télécharger</a>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
               return null;
             })}
             {loading&&<div className="msg-loading"><div className="dots"><span/><span/><span/></div>MAEIA analyse vos données...</div>}
@@ -1056,7 +1238,7 @@ function Monitoring() {
   const [error, setError] = useState(false);
 
   const fetchData = useCallback(() => {
-    fetch(`${API}/monitoring`).then(r=>r.json()).then(d=>{setData(d);setError(false);}).catch(()=>setError(true));
+    apiFetch(`${API}/monitoring`).then(r=>r.json()).then(d=>{setData(d);setError(false);}).catch(()=>setError(true));
   }, []);
 
   useEffect(()=>{fetchData();const t=setInterval(fetchData,15000);return()=>clearInterval(t);},[fetchData]);
@@ -1067,12 +1249,11 @@ function Monitoring() {
   const hasDrift = drift && !drift.note && !drift.error;
 
   const perfKpis = hasPerf ? [
-    {label:"Exécutions analysées",     val:(perf.executions_analysees||0).toLocaleString(), icon:"🔁"},
-    {label:"Latence moyenne",          val:`${(perf.latence_moyenne_ms||0).toLocaleString()} ms`, icon:"⏱️"},
-    {label:"Latence max",              val:`${(perf.latence_max_ms||0).toLocaleString()} ms`, icon:"📶"},
-    {label:"Tokens moyens / requête",  val:(perf.tokens_moyens||0).toLocaleString(), icon:"🔤"},
-    {label:"Taux d'erreur",            val:`${perf.taux_erreur_pct||0}%`, icon:"⚠️"},
-    {label:"Appels avec outils",       val:`${perf.pct_avec_appels_outils||0}%`, icon:"🛠️"},
+    {label:"Latence moyenne",          val:`${(perf.latence_moyenne_ms||0).toLocaleString()} ms`},
+    {label:"Latence max",              val:`${(perf.latence_max_ms||0).toLocaleString()} ms`},
+    {label:"Tokens moyens / requête",  val:(perf.tokens_moyens||0).toLocaleString()},
+    {label:"Taux d'erreur",            val:`${perf.taux_erreur_pct||0}%`},
+    {label:"Appels avec outils",       val:`${perf.pct_avec_appels_outils||0}%`},
   ] : [];
 
   return (
@@ -1086,18 +1267,22 @@ function Monitoring() {
       {error && <div className="empty">Backend injoignable.</div>}
 
       {data && (hasPerf ? (
-        <div className="kpi-grid" style={{marginBottom:24}}>
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:12,color:"var(--muted)",marginBottom:10}}>
+            Statistiques calculées sur les {(perf.executions_analysees||0).toLocaleString()} dernières exécutions de l'agent
+          </div>
+          <div className="kpi-grid">
           {perfKpis.map((k,i)=>(
             <div key={i} className="kpi">
-              <div className="kpi-icon">{k.icon}</div>
               <div className="kpi-label">{k.label}</div>
               <div className="kpi-val" style={{fontSize:20}}>{k.val}</div>
             </div>
           ))}
+          </div>
         </div>
       ) : (
         <div className="chart-card" style={{marginBottom:24}}>
-          <div className="chart-title">🔁 Performance de l'agent</div>
+          <div className="chart-title">Performance de l'agent</div>
           <div className="empty">{perf?.note || perf?.error || "Aucune donnée disponible."}</div>
         </div>
       ))}
@@ -1105,13 +1290,13 @@ function Monitoring() {
       {data && (
         <div className="chart-card">
           <div className="chart-title">
-            📉 Dérive des données (Data Drift)
+            Dérive des données (Data Drift)
             {hasDrift && (
               <span className="update-tag" style={{marginLeft:"auto",
                 background: drift.alerte_derive ? "#fff0f0" : undefined,
                 color:      drift.alerte_derive ? "#b91c1c" : undefined,
                 borderColor:drift.alerte_derive ? "#fca5a5" : undefined}}>
-                {drift.alerte_derive ? "⚠️ Dérive détectée" : "✓ Stable"}
+                {drift.alerte_derive ? "Dérive détectée" : "Stable"}
               </span>
             )}
           </div>
@@ -1166,7 +1351,7 @@ function App() {
 
   useEffect(()=>{
     if (!currentUser) return;
-    const check=()=>fetch(`${API}/status`).then(r=>r.json()).then(setStatus).catch(()=>setStatus(null));
+    const check=()=>apiFetch(`${API}/status`).then(r=>r.json()).then(setStatus).catch(()=>setStatus(null));
     check();const t=setInterval(check,8000);return()=>clearInterval(t);
   },[currentUser]);
 
@@ -1187,6 +1372,8 @@ function App() {
   };
 
   const handleLogout = () => {
+    apiFetch(`${API}/logout`, {method:"POST"}).catch(()=>{});
+    sessionStorage.removeItem("mae_token");
     clearSession();
     setCurrentUser(null);
     setPage("dashboard");
@@ -1225,13 +1412,14 @@ function App() {
   // metier), la Direction Generale voit tout le reste mais jamais
   // Administration. Un seul compte ne voit jamais les deux univers.
   const NAV = isAdmin
-    ? [{id:"admin", icon:"⚙️", label:"Administration"}]
+    ? [{id:"admin", label:"Administration"}]
     : [
-        {id:"dashboard",   icon:"📊",label:"Tableau de Bord"},
-        {id:"forecast",    icon:"🔮",label:"Prévisions 2026"},
-        {id:"segmentation",icon:"👥",label:"Segmentation"},
-        {id:"monitoring",  icon:"📡",label:"Monitoring"},
-        {id:"agent",       icon:"🤖",label:"Agent IA"},
+        {id:"dashboard",   label:"Tableau de Bord"},
+        {id:"forecast",    label:"Prévisions"},
+        {id:"segmentation",label:"Segmentation"},
+        {id:"sinistres",   label:"Sinistres & Risque"},
+        {id:"monitoring",  label:"Monitoring"},
+        {id:"agent",       label:"Agent IA"},
       ];
 
   return (
@@ -1246,19 +1434,18 @@ function App() {
           {NAV.map(n=>(
             <button key={n.id} className={`sb-item ${page===n.id?"active":""}`}
               onClick={()=>setPage(n.id)}>
-              <span className="sb-icon">{n.icon}</span>{n.label}
+              {n.label}
             </button>
           ))}
           {!isAdmin && conversations.length>0&&(
             <>
               <div className="sb-section" style={{marginTop:8}}>Conversations ({conversations.length})</div>
               <button className="new-chat-btn" onClick={()=>handleNewChat(null)}>
-                <span style={{fontSize:16}}>✦</span>Nouvelle conversation
+                Nouvelle conversation
               </button>
               {conversations.map(conv=>(
                 <button key={conv.id} className={`hist-item ${activeConvId===conv.id&&page==="agent"?"active-hist":""}`}
                   onClick={()=>{setActiveConvId(conv.id);setPage("agent");}}>
-                  <span className="hist-icon">💬</span>
                   <span className="hist-text">{conv.title}</span>
                   <span className="hist-date">{fmtHistDate(conv.createdAt)}</span>
                   <button className="hist-del" onClick={e=>{e.stopPropagation();handleDeleteConv(conv.id);}}>✕</button>
@@ -1270,7 +1457,7 @@ function App() {
             <>
               <div className="sb-section" style={{marginTop:8}}>Conversations</div>
               <button className="new-chat-btn" onClick={()=>handleNewChat(null)}>
-                <span style={{fontSize:16}}>✦</span>Nouvelle conversation
+                Nouvelle conversation
               </button>
               <div className="hist-empty">Aucune conversation</div>
             </>
@@ -1278,7 +1465,6 @@ function App() {
         </div>
         <div className="sb-footer">
           <div className="sb-user">
-            <div className="sb-user-avatar">{isAdmin?"🔐":"👤"}</div>
             <div style={{flex:1,minWidth:0}}>
               <div className="sb-user-name">{currentUser.name}</div>
               <div className="sb-user-role">{isAdmin?"Administrateur":"Direction Générale"}</div>
@@ -1296,7 +1482,6 @@ function App() {
                 background:"rgba(217,48,37,0.18)",border:"1px solid rgba(217,48,37,0.4)",borderRadius:8,
                 color:"#ffb4ac",fontSize:10.5,fontWeight:600,fontFamily:"inherit",cursor:"pointer",width:"100%",
                 textAlign:"left"}}>
-              <span style={{fontSize:13}}>⚠️</span>
               Dérive données ({status.drift_ecart_pct>0?"+":""}{status.drift_ecart_pct}%)
             </button>
           )}
@@ -1312,7 +1497,7 @@ function App() {
           <AdminPage/>
         ) : (
           <>
-            {page!=="agent"&&page!=="monitoring"&&(
+            {page!=="agent"&&page!=="monitoring"&&page!=="sinistres"&&(
               <Filters filters={filters} values={fVals}
                 onChange={(k,v)=>setFVals(p=>({...p,[k]:v}))}
                 onReset={()=>setFVals({agence:"all",region:"all",branche:"all",mois:0})}/>
@@ -1320,6 +1505,7 @@ function App() {
             {page==="dashboard"    && <Dashboard filterVals={fVals} onFiltersLoaded={handleFiltersLoaded}/>}
             {page==="forecast"     && <Forecast/>}
             {page==="segmentation" && <Segmentation/>}
+            {page==="sinistres"    && <SinistresRisque/>}
             {page==="monitoring"   && <Monitoring/>}
             {page==="agent"        && <Agent conversations={conversations} activeConvId={activeConvId}
                 onNewChat={handleNewChat} onSelectConv={id=>{setActiveConvId(id);setPage("agent");}}
