@@ -1,5 +1,5 @@
 # Dependances MINIMALES pour faire tourner mae_backend/ (FastAPI + agent
-# Groq), PAS une copie du requirements.txt racine (qui est un freeze complet
+# local Ollama), PAS une copie du requirements.txt racine (qui est un freeze complet
 # de l'environnement de recherche/notebooks : TensorFlow, PyTorch, Jupyter,
 # DVC... aucun de ces packages n'est importe par main.py/agent.py). Versions
 # alignees sur celles verifiees fonctionnelles dans le venv du projet.
@@ -25,14 +25,16 @@ mlflow==3.7.0
 # cp311 est confirme disponible -- verifie directement via
 # "pip download --platform manylinux2014_x86_64 --python-version 3.11".
 pydantic==2.11.5
-groq==1.2.0
+# openai SDK utilise contre l'API compatible OpenAI d'Ollama (agent local,
+# voir agent.py v2.5) -- necessite Ollama installe et lance en local
+# (https://ollama.com), avec le modele "ollama pull qwen2.5:3b-instruct".
+openai==2.36.0
 openpyxl==3.1.5  # export Excel des rapports (leger, moteur pandas.to_excel)
 
 # --- Optionnel : PDF (leger, pas de dependance lourde) ---
 reportlab>=4.0,<5.0
 
 # --- Optionnel : RAG (LOURD, ~1-2 Go avec torch) -- versions verifiees
-# fonctionnelles avec Llama 3.3 70B/Groq au 2026-08 : chromadb 1.5.9,
-# sentence-transformers 5.7.0. ---
+# fonctionnelles au 2026-08 : chromadb 1.5.9, sentence-transformers 5.7.0. ---
 # chromadb>=1.5,<2.0
 # sentence-transformers>=5.0,<6.0

@@ -22,7 +22,7 @@ l'agent REEL (vrais appels Groq), avec deux mesures objectives :
 COUT EN TOKENS : chaque question declenche un vrai appel Groq (system
 prompt + 15 schemas d'outils + question, soit environ 2000-4000 tokens
 d'entree par appel selon le nombre d'iterations ReAct). Sur le quota
-gratuit Groq (100 000 tokens/JOUR pour llama-3.3-70b-versatile), les 30
+gratuit Groq (le quota depend du modele configure dans agent.py), les 30
 questions completes peuvent representer une fraction significative du
 quota quotidien -- prevoir de lancer avec --limit N pour un sous-ensemble
 si le quota est deja entame par d'autres tests.
@@ -66,10 +66,10 @@ EVAL_QUESTIONS = [
     {"id": "agence_03", "category": "agences", "question": "Quelle est la part de marche de l'agence Sfax Ville ?", "expected_tools": ["top_agencies", "compare_agencies"]},
 
     # --- Prevision ---
-    {"id": "forecast_01", "category": "forecast", "question": "Quelle est la prevision de chiffre d'affaires pour 2026 ?", "expected_tools": ["forecast"]},
-    {"id": "forecast_02", "category": "forecast", "question": "Quel CA est prevu pour le mois de juin 2026 ?", "expected_tools": ["forecast"]},
+    {"id": "forecast_01", "category": "forecast", "question": "Quelle est la prevision de chiffre d'affaires pour les 12 prochains mois ?", "expected_tools": ["forecast"]},
+    {"id": "forecast_02", "category": "forecast", "question": "Quel CA est prevu pour le mois de juin ?", "expected_tools": ["forecast"]},
     {"id": "forecast_03", "category": "forecast", "question": "Explique-moi en detail comment est calculee la prevision de decembre.", "expected_tools": ["explain_forecast"]},
-    {"id": "forecast_04", "category": "forecast", "question": "Pourquoi la croissance prevue est-elle de 4.7% ?", "expected_tools": ["explain_forecast"]},
+    {"id": "forecast_04", "category": "forecast", "question": "Pourquoi le taux de croissance prevu est-il ce qu'il est ?", "expected_tools": ["explain_forecast"]},
 
     # --- Segmentation ---
     {"id": "segment_01", "category": "segmentation", "question": "Quels sont les segments de clients identifies ?", "expected_tools": ["segments"]},

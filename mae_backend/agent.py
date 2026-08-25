@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 agent.py — MAEIA · Agent ReAct MAE Assurances
-Modele : Llama 3.3 70B via Groq (gratuit, rapide, tool calling)
+Modele : Qwen2.5-3B-Instruct via Ollama, local, GPU (voir Changelog v2.5)
 Architecture : Reasoning -> Tool Selection -> Execution -> Observation -> Reponse
 MLflow tracke chaque interaction
 
@@ -12,15 +12,19 @@ Changelog v2 (2026-07) — Memoire + RAG :
   de la question courante (pas juste les N derniers tours de la
   conversation en cours) et les injecte comme contexte "memoire".
 - RAG METIER (ChromaDB, collection "documents_metier") : ingestion des
-  documents dans business_docs/ (conditions generales, grille tarifaire,
-  circulaire segmentation, glossaire sinistres). Nouvel outil
+  documents dans business_docs/ (assurance_auto_sayartek, a_propos_mae,
+  procedure_sinistres, circulaire_segmentation). Nouvel outil
   consulter_documents_metier(query) que l'agent peut appeler comme n'importe
   quel autre outil.
-  IMPORTANT : ces documents sont ILLUSTRATIFS, rediges pour ce PFE car
-  aucun document officiel MAE n'a ete fourni — voir l'entete de chaque
-  fichier dans business_docs/. A remplacer par les vrais documents MAE
-  si/quand ils deviennent disponibles (il suffira de les deposer dans
-  business_docs/ et de relancer l'ingestion, aucun autre changement requis).
+  MISE A JOUR (2026-08, remarque superviseur) : 3 des 4 documents
+  contiennent maintenant du contenu REEL extrait du site officiel
+  www.mae.tn (garanties Sayartek, procedure de declaration de sinistre,
+  presentation de MAE) -- remplace les anciens documents entierement
+  fabriques. circulaire_segmentation reste "illustratif" au sens ou ce
+  n'est pas une vraie circulaire interne, mais ses statistiques par
+  segment sont REELLES (issues du clustering K-Means du projet, pas
+  inventees). Voir l'entete de chaque fichier dans business_docs/ pour le
+  detail exact de ce qui est reel vs. propose par le projet.
 - L'ingestion est IDEMPOTENTE : si la collection documents_metier contient
   deja des entrees, elle n'est pas re-remplie a chaque redemarrage.
 
@@ -69,15 +73,33 @@ Changelog v2.3 (2026-07, rapports PDF fiables + scoping) :
   (resume/agences/previsions/risques) cote main.py, et le system prompt
   indique explicitement au modele de les utiliser quand l'utilisateur
   precise un perimetre au lieu de toujours generer le rapport complet.
+
+Changelog v2.5 (2026-08, modele local) :
+- GROQ REMPLACE PAR OLLAMA/QWEN2.5-3B EN LOCAL : Groq a retire
+  llama-3.3-70b-versatile de son catalogue (confirme via l'API le
+  2026-08-20 -- 404 model_not_found), ce qui rendait l'agent de
+  production totalement indisponible. Un benchmark sur les 15 outils
+  reels de l'agent a compare le modele local (Qwen2.5-3B via Ollama, GPU)
+  a deux remplacants Groq possibles : openai/gpt-oss-120b (instable --
+  plante des qu'un parametre optionnel est omis, rate-limit a 8000
+  tokens/min) et qwen/qwen3.6-27b (fiable mais "modele de raisonnement",
+  25-64s/appel). Le modele local a obtenu 8/8 en selection d'outil avec
+  une latence de 3.5-18s -- meilleur sur les deux criteres, et repond en
+  prime a la demande du superviseur de garder les donnees en local.
+  self.client pointe desormais vers l'API compatible OpenAI d'Ollama
+  (OLLAMA_BASE_URL) au lieu du SDK Groq -- meme forme de reponse, aucun
+  changement necessaire dans la boucle ReAct.
 """
 
+import inspect
 import json
 import os
+import re
 import time
 import glob
 import logging
 from datetime import datetime
-from groq import Groq
+from openai import OpenAI
 import mlflow
 
 # ════════════════════════════════════════════════════════════════
@@ -97,9 +119,30 @@ mlflow.set_experiment("MAE_Agent_Interactions")
 # ════════════════════════════════════════════════════════════════
 # CONSTANTES D'OPTIMISATION (v2.2)
 # ════════════════════════════════════════════════════════════════
-MAX_GROQ_RETRIES     = 2      # nombre de RE-essais apres le premier echec (donc 3 tentatives au total)
-GROQ_RETRY_BASE_SEC  = 1.5    # backoff exponentiel : 1.5s, 3.0s, ...
+MAX_LLM_RETRIES      = 2      # nombre de RE-essais apres le premier echec (donc 3 tentatives au total)
+LLM_RETRY_BASE_SEC   = 1.5    # backoff exponentiel : 1.5s, 3.0s, ...
 TOOL_RESULT_MAX_CHARS = 1800  # taille max (en caracteres JSON) d'un resultat d'outil injecte dans l'historique
+RAG_PERTINENCE_GAP_MAX = 0.03  # v2.5 -- ecart max de pertinence tolere vs le meilleur extrait RAG (voir consulter_documents_metier)
+REPORT_URL_RE = re.compile(r'https?://\S+/api/reports/\S+\.(?:pdf|xlsx)', re.IGNORECASE)
+
+# ════════════════════════════════════════════════════════════════
+# MODELE LOCAL (v2.5, 2026-08) — Ollama / Qwen2.5-3B-Instruct
+# ════════════════════════════════════════════════════════════════
+# Remplace Groq/Llama-3.3-70B (modele retire du catalogue Groq, cf.
+# benchmark du 2026-08-20) : execution 100% locale sur le GPU de la
+# machine (RTX 3050 6GB, offload GPU confirme via `ollama ps`), aucune
+# donnee ne quitte la machine -- repond a la demande securite/donnees du
+# superviseur. Benchmark sur les 15 outils reels de l'agent : 8/8 bons
+# choix d'outil, latence 3.5-18s, contre des alternatives cloud Groq soit
+# instables (openai/gpt-oss-120b : plante sur les parametres optionnels
+# non fournis, rate-limit a 8000 tokens/min) soit tres lentes
+# (qwen/qwen3.6-27b : "modele de raisonnement", 25-64s/appel).
+# Ollama expose une API compatible OpenAI (/v1) : le SDK `openai` standard
+# fonctionne sans aucun changement au reste de la boucle ReAct ci-dessous
+# (meme forme de reponse que le SDK Groq -- choices[0].message.tool_calls
+# avec arguments encodes en JSON string).
+OLLAMA_BASE_URL = "http://localhost:11434/v1"
+OLLAMA_MODEL    = "qwen2.5:3b-instruct"
 
 # ════════════════════════════════════════════════════════════════
 # CHROMADB — memoire long terme + RAG documents metier
@@ -211,18 +254,18 @@ def ensure_documents_ingested():
 
 
 _SOURCE_LABELS = {
-    "conditions_generales_extrait.md": "les Conditions Générales",
-    "grille_tarifaire.md":             "la Grille Tarifaire",
-    "circulaire_segmentation.md":      "la Circulaire de Segmentation",
-    "glossaire_sinistres.md":          "le Glossaire des Sinistres",
+    "assurance_auto_sayartek.md":  "la page Assurance Auto Sayartek (site officiel MAE)",
+    "circulaire_segmentation.md":  "la Circulaire de Segmentation",
+    "procedure_sinistres.md":      "la Procédure de Déclaration de Sinistre (site officiel MAE)",
+    "a_propos_mae.md":             "la page À Propos de MAE (site officiel MAE)",
 }
 
 
 def consulter_documents_metier(query: str, n_results: int = 3):
     """
     Outil RAG : recherche semantique dans les documents metier MAE
-    (conditions generales, grille tarifaire, circulaire segmentation,
-    glossaire sinistres). A utiliser pour toute question sur le
+    (garanties Sayartek, procedure de declaration de sinistre, circulaire
+    de segmentation, presentation MAE -- voir business_docs/). A utiliser pour toute question sur le
     fonctionnement du metier assurance, PAS pour des chiffres du
     portefeuille (utiliser les autres outils pour cela).
 
@@ -266,9 +309,65 @@ def consulter_documents_metier(query: str, n_results: int = 3):
                 "extrait":      doc,
                 "pertinence":   round(1 - dist, 3) if dist is not None else None,
             })
+        # v2.5 -- avec un modele local plus petit (Qwen2.5-3B), garder des
+        # extraits faiblement pertinents mais venant d'une source DIFFERENTE
+        # du meilleur match cause des hallucinations par conflation (observe
+        # empiriquement : un extrait sur un segment de clientele, retourne en
+        # 2e position pour une question produit, a ete fusionne a tort avec
+        # le produit demande). Un simple rappel dans le system prompt ne
+        # suffit pas a l empecher -- on filtre donc ici les extraits trop
+        # loin du meilleur score plutot que de laisser le modele les trier.
+        if resultats and resultats[0]["pertinence"] is not None:
+            seuil = resultats[0]["pertinence"] - RAG_PERTINENCE_GAP_MAX
+            resultats = [r for r in resultats if r["pertinence"] is None or r["pertinence"] >= seuil]
         return {"resultats": resultats}
     except Exception as e:
         return {"error": str(e)}
+
+
+def _format_fallback_data(donnees: dict) -> str:
+    """
+    v2.5 -- formate les resultats d outils reels en liste lisible (pas de
+    JSON brut) pour la reponse de secours du garde-fou anti-boucle. Purement
+    deterministe (aucun appel LLM). Recursif : un resultat dont TOUTES les
+    valeurs sont elles-memes des dict (ex: profil_clients = {"sexe":{...},
+    "csp":{...},...}, agent_monitoring = {"agent_performance":{...},
+    "data_drift":{...}}) ne doit pas etre saute silencieusement -- bug
+    corrige (la version precedente, non recursive, produisait un bloc
+    entierement vide pour ces deux outils).
+    """
+    def render(value, indent=0):
+        pad = "  " * indent
+        lines = []
+        if isinstance(value, dict):
+            if "error" in value:
+                lines.append(f"{pad}- Erreur : {value['error']}")
+                return lines
+            for k, v in value.items():
+                if isinstance(v, (dict, list)):
+                    lines.append(f"{pad}- {k} :")
+                    lines.extend(render(v, indent + 1))
+                else:
+                    lines.append(f"{pad}- {k} : {v}")
+        elif isinstance(value, list):
+            for item in value[:10]:
+                if isinstance(item, dict):
+                    bits = ", ".join(f"{k}={v}" for k, v in list(item.items())[:6])
+                    lines.append(f"{pad}- {bits}")
+                else:
+                    lines.append(f"{pad}- {item}")
+            if len(value) > 10:
+                lines.append(f"{pad}- ... ({len(value) - 10} autres non affiches)")
+        else:
+            lines.append(f"{pad}{value}")
+        return lines
+
+    out = []
+    for tool_name, result in donnees.items():
+        out.append(f"**{tool_name}**")
+        out.extend(render(result))
+        out.append("")
+    return "\n".join(out).strip()
 
 
 def _remember_analysis(question: str, answer: str, tools_used: list):
@@ -390,16 +489,22 @@ Regles :
 - Utilise TOUJOURS les outils pour acceder aux donnees reelles AVANT de repondre
 - Pour toute question sur le FONCTIONNEMENT du metier assurance (garanties, franchise, bonus-malus, tarification, delais de declaration, statuts de sinistre...), utilise l outil consulter_documents_metier plutot que de deviner
 - Quand tu t appuies sur un resultat de consulter_documents_metier, cite TOUJOURS explicitement le document source dans ta reponse (utilise le champ source_label, ex: "Selon la Grille Tarifaire, ..." ou "D apres le Glossaire des Sinistres, ...") -- ne te contente jamais de paraphraser l information sans indiquer d ou elle vient
+- ATTENTION consulter_documents_metier renvoie plusieurs extraits INDEPENDANTS pouvant venir de documents differents (champ "source") -- ne combine JAMAIS une information d un extrait avec une entite (client, produit, agence...) mentionnee seulement dans un AUTRE extrait ayant une source differente. Si un extrait sur un segment de clientele apparait alors que la question porte sur un produit (ou inversement), ignore-le silencieusement au lieu d en tirer une conclusion croisee non justifiee par le texte
 - Ne devine jamais des chiffres — utilise toujours un outil
 - Si un resultat d outil contient une cle "error", NE fabrique JAMAIS une reponse plausible a la place -- dis clairement a l utilisateur que cette donnee n a pas pu etre recuperee (sans forcement entrer dans le detail technique de l erreur) et propose de reformuler ou reessayer
 - Si plusieurs outils sont pertinents, appelle-les tous avant de synthetiser
-- Structure ta reponse : Analyse -> Chiffres cles -> Recommandations
+- Ne rappelle JAMAIS un outil avec exactement les memes parametres si tu as deja son resultat dans cette conversation -- utilise le resultat deja obtenu pour repondre directement
+- Reponds D ABORD directement et brievement a la question posee, avec le ou les chiffres demandes -- rien de plus si la question est simple et precise (ex: "quel est le CA total ?" -> une phrase avec le chiffre, PAS de sections supplementaires)
+- N ajoute une section "Chiffres cles" (recap en liste) QUE si la reponse comporte plusieurs chiffres distincts a retenir -- ne recopie jamais en liste des chiffres deja donnes en toutes lettres juste au-dessus, c est une repetition inutile
+- N ajoute une section "Recommandations" QUE si l utilisateur demande explicitement un avis/conseil, ou si le resultat revele un probleme clair (risque eleve, anomalie, sinistralite excessive) qui appelle une action -- ce n est PAS une section obligatoire dans chaque reponse
+- Ne mentionne JAMAIS le nom technique d un outil (ex: "risk_clients", "portfolio_summary") dans ta reponse -- decris ce que tu ferais en langage naturel ("je peux vous donner la liste nominative de ces clients") si tu veux orienter l utilisateur vers une autre question
 - Les donnees sont mises a jour en temps reel toutes les 5 secondes
 - IMPORTANT FORMAT MONNAIE: Affiche TOUJOURS les montants en TND avec le format suivant: 1 234 567,89 TND (espace comme separateur de milliers, virgule pour les decimales). Exemple: 1 887 480,00 TND et NON pas 1887480 ou 1,887,480
 - Utilise l outil explain_forecast (plutot que forecast) quand l utilisateur demande d expliquer, justifier ou detailler le calcul d une prevision -- pas seulement le chiffre
 - Utilise l outil agent_monitoring quand l utilisateur demande la performance du systeme ou si les donnees derivent
-- Sois precis, concret et actionnable dans tes recommandations
+- Quand tu donnes des recommandations, sois precis, concret et actionnable -- mais reste court (2-3 points maximum, pas un plan d action complet)
 - Si un contexte "Analyses passees pertinentes" t est fourni, appuie-toi dessus pour assurer la coherence avec tes reponses precedentes, mais ne le mentionne explicitement que si c est utile a la reponse
+- N utilise JAMAIS un nom d agence/region/branche mentionne uniquement dans les "Analyses passees pertinentes" comme parametre de filtre pour un appel d outil de cette reponse -- un filtre (agence/region/branche/n/mois_num) ne vient QUE d une demande explicite de l utilisateur dans son message actuel, jamais d une analyse passee rappelee
 - Si un resultat d outil contient une marque "tronque", precise a l utilisateur que seule une partie des resultats a ete analysee et propose d affiner la question si besoin (par exemple filtrer par agence ou par periode)
 - Si consulter_documents_metier retourne "indisponible", explique brievement a l utilisateur que la recherche documentaire n est pas active sur cet environnement, sans entrer dans les details techniques
 - Utilise l outil generate_report quand l utilisateur demande un rapport PDF, un document, ou un export du portefeuille
@@ -450,7 +555,7 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "forecast",
-            "description": "Previsions CA 2026 avec intervalle de confiance 95%. Sans parametre: toute l annee. Avec mois_num 1-12: un mois precis.",
+            "description": "Previsions CA sur les 12 prochains mois (a partir du mois prochain reel) avec intervalle de confiance croissant selon l horizon. Sans parametre: les 12 mois. Avec mois_num 1-12 (numero de mois calendaire): un mois precis.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -464,12 +569,24 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "explain_forecast",
-            "description": "Decompose la prevision CA (base 2025 x croissance x saisonnalite) pour EXPLIQUER le calcul plutot que de donner juste un chiffre. A utiliser si l utilisateur demande d expliquer/justifier/detailler une prevision -- sinon utiliser forecast.",
+            "description": "Decompose la prevision CA (base actuelle x croissance x saisonnalite) pour EXPLIQUER le calcul plutot que de donner juste un chiffre. A utiliser si l utilisateur demande d expliquer/justifier/detailler une prevision -- sinon utiliser forecast.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mois_num": {"type": "integer", "description": "Numero du mois 1-12 (optionnel, omis = decomposition annuelle)"},
                 },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "accidents_forecast",
+            "description": "Prevision du NOMBRE d accidents/sinistres attendus sur les 12 prochains mois (un compte d evenements, pas un montant en TND). A utiliser quand l utilisateur demande combien d accidents sont prevus -- pour le chiffre d affaires previsionnel en TND, utiliser forecast.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
                 "required": []
             }
         }
@@ -524,7 +641,7 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "segments",
-            "description": "Profils complets des 4 segments K-Means : Premium, Standard, Occasionnel, A Risque. CA moyen, bonus-malus, nb contrats, risque.",
+            "description": "Profils complets des 7 segments K-Means (Client Premium, Client Fidele, Client Grand Contrat, Client Capital Eleve, Client Economique, Client a Risque, Clientele Feminine). CA moyen, bonus-malus, nb contrats, risque.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -641,7 +758,7 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "consulter_documents_metier",
-            "description": "Recherche semantique (RAG) dans les documents MAE : conditions generales, grille tarifaire, circulaire de segmentation, glossaire des sinistres. Pour toute question sur le FONCTIONNEMENT du metier assurance (garanties, franchise, bonus-malus, delais...), pas pour des chiffres du portefeuille.",
+            "description": "Recherche semantique (RAG) dans les documents MAE : garanties Sayartek (site officiel MAE), procedure de declaration de sinistre (site officiel MAE), circulaire de segmentation (7 segments reels), presentation de la MAE. Pour toute question sur le FONCTIONNEMENT du metier assurance (garanties, delais, segments...), pas pour des chiffres du portefeuille.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -654,8 +771,8 @@ TOOL_DEFS = [
 ]
 
 # ════════════════════════════════════════════════════════════════
-# MODE DEGRADE (v2.4) — utilise quand Groq reste indisponible apres tous
-# les retries de _call_groq_with_retry (panne prolongee, quota epuise...).
+# MODE DEGRADE (v2.4) — utilise quand le modele local reste indisponible
+# apres tous les retries de _call_llm_with_retry (panne prolongee...).
 # Routeur par MOTS-CLES (aucun appel LLM) vers un sous-ensemble des outils
 # qui ne prennent aucun parametre obligatoire -- objectif : renvoyer des
 # DONNEES REELLES plutot qu un message d erreur sec quand le service IA
@@ -682,7 +799,7 @@ DEGRADED_MODE_ROUTES = [
 # ════════════════════════════════════════════════════════════════
 class MAEAgent:
     """
-    Agent ReAct pour la MAE — Groq + Llama 3.3 70B.
+    Agent ReAct pour la MAE — Ollama local (Qwen2.5-3B, GPU), voir v2.5.
     tools_map injecte depuis main.py (pas d import circulaire).
     Le tool RAG (consulter_documents_metier) et la memoire long terme sont
     geres directement ici, independamment de main.py. Ils degradent
@@ -699,31 +816,24 @@ class MAEAgent:
         # "outil inconnu" cote agent si le modele essaie de l appeler.
         self.tools_map = {**tools_map, "consulter_documents_metier": consulter_documents_metier}
 
-        api_key = os.environ.get("GROQ_API_KEY", "")
-        if not api_key:
-            raise ValueError(
-                "GROQ_API_KEY non configuree. "
-                "Creez un compte gratuit sur console.groq.com et ajoutez la cle dans .env"
-            )
-        self.client = Groq(api_key=api_key)
-        self.model  = "llama-3.3-70b-versatile"
+        self.client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+        self.model  = OLLAMA_MODEL
 
         # Ingestion RAG idempotente au premier demarrage de l agent —
         # no-op silencieux si RAG_AVAILABLE est False.
         ensure_documents_ingested()
 
-    def _call_groq_with_retry(self, messages: list):
+    def _call_llm_with_retry(self, messages: list):
         """
-        Appelle l API Groq avec retry + backoff exponentiel (v2.2). Un
-        echec transitoire (rate limit 429, timeout reseau, erreur 5xx
-        cote Groq) ne fait plus echouer tout le tour de conversation des
-        la premiere tentative — utile en demo live ou l API peut avoir
-        des latences ponctuelles. Apres MAX_GROQ_RETRIES echecs, l
+        Appelle le modele local (Ollama) avec retry + backoff exponentiel
+        (v2.2). Un echec transitoire (Ollama pas encore charge en memoire,
+        timeout local) ne fait plus echouer tout le tour de conversation
+        des la premiere tentative. Apres MAX_LLM_RETRIES echecs, l
         exception est re-levee pour etre geree par l appelant (qui
         renvoie une reponse d erreur propre a l utilisateur).
         """
         last_exception = None
-        for attempt in range(MAX_GROQ_RETRIES + 1):
+        for attempt in range(MAX_LLM_RETRIES + 1):
             try:
                 return self.client.chat.completions.create(
                     model=self.model,
@@ -732,24 +842,33 @@ class MAEAgent:
                     tool_choice="auto",
                     max_tokens=2048,
                     temperature=0.1,
+                    # v2.5 -- un modele local plus petit (Qwen2.5-3B) peut
+                    # degenerer en repetition (observe empiriquement sur
+                    # profil_clients : la meme phrase reformulee en boucle
+                    # jusqu a max_tokens). frequency_penalty est le parametre
+                    # OpenAI standard ; repeat_penalty (extra_body) est
+                    # l equivalent natif Ollama -- les deux sont passes pour
+                    # couvrir le cas ou l un des deux n est pas honore.
+                    frequency_penalty=0.4,
+                    extra_body={"options": {"repeat_penalty": 1.3}},
                 )
             except Exception as e:
                 last_exception = e
-                if attempt < MAX_GROQ_RETRIES:
-                    wait_s = GROQ_RETRY_BASE_SEC * (attempt + 1)
+                if attempt < MAX_LLM_RETRIES:
+                    wait_s = LLM_RETRY_BASE_SEC * (attempt + 1)
                     logging.warning(
-                        f"Groq API error (tentative {attempt + 1}/{MAX_GROQ_RETRIES + 1}): {e} "
+                        f"Erreur modele local (tentative {attempt + 1}/{MAX_LLM_RETRIES + 1}): {e} "
                         f"— nouvel essai dans {wait_s:.1f}s"
                     )
                     time.sleep(wait_s)
                 else:
-                    logging.error(f"Groq API error apres {MAX_GROQ_RETRIES + 1} tentatives: {e}")
+                    logging.error(f"Erreur modele local apres {MAX_LLM_RETRIES + 1} tentatives: {e}")
         raise last_exception
 
     def _degraded_mode_response(self, user_message: str):
         """
-        Reponse de secours quand Groq reste indisponible apres tous les
-        retries (voir _call_groq_with_retry). Pas d IA ici : un routeur par
+        Reponse de secours quand le modele local reste indisponible apres
+        tous les retries (voir _call_llm_with_retry). Pas d IA ici : un routeur par
         mots-cles (DEGRADED_MODE_ROUTES) appelle DIRECTEMENT l un des
         outils sans parametre obligatoire et renvoie ses donnees brutes,
         plutot que de laisser l utilisateur avec un message d erreur sec.
@@ -811,6 +930,33 @@ class MAEAgent:
                 messages.append({"role": role, "content": str(content)})
         messages.append({"role": "user", "content": user_message})
 
+        # v2.5 -- garde-fou anti-boucle : un modele local plus petit (Qwen2.5-
+        # 3B) peut rester bloque a rappeler le MEME outil avec les MEMES
+        # parametres au lieu de synthetiser une reponse (observe empiriquement :
+        # 8 appels identiques a segments() de suite jusqu a la limite
+        # d iterations). Un simple rappel dans le system prompt n a pas suffi
+        # a l empecher (meme constat que pour le RAG, voir plus haut) -- on
+        # detecte donc ici les appels EXACTEMENT dupliques (meme nom + memes
+        # arguments deja vus dans ce tour) et on renvoie le resultat en cache
+        # au lieu de ré-executer l outil, avec une note explicite demandant
+        # au modele de repondre. Beneficie aussi les outils a effet de bord
+        # (generate_report) : evite de regenerer plusieurs fois le meme rapport.
+        called_signatures = {}
+        # v2.5 -- garde-fou anti-boucle (variante) : le modele peut aussi
+        # boucler en variant legerement les parametres a chaque appel (ex:
+        # risk_clients avec n=20 puis n=10 puis n=5...), ce qui contourne la
+        # detection par signature EXACTE ci-dessus tout en produisant le
+        # meme symptome (jamais de synthese finale). On compte donc aussi les
+        # appels par NOM d outil seul, tous parametres confondus.
+        tool_name_counts = {}
+        # v2.5 -- initialement 3, resserre a 1 : sur tous les cas observes
+        # (segments, branch_analysis, compare_agencies, risk_clients,
+        # consulter_documents_metier), le modele local ne s est JAMAIS
+        # rattrape apres un premier rappel du meme outil, meme avec des
+        # parametres differents -- attendre plus longtemps ne fait que
+        # gaspiller du temps et des iterations pour le meme resultat final.
+        MAX_SAME_TOOL_CALLS = 1
+
         # MLflow tracking
         mlflow_active = False
         try:
@@ -828,25 +974,25 @@ class MAEAgent:
             # ── ReAct loop ────────────────────────────────────────
             for iteration in range(max_iterations):
                 try:
-                    response = self._call_groq_with_retry(messages)
+                    response = self._call_llm_with_retry(messages)
                 except Exception as e:
-                    logging.error(f"Groq API error (definitif apres retries): {e}")
+                    logging.error(f"Erreur modele local (definitif apres retries): {e}")
                     degraded = self._degraded_mode_response(user_message)
                     if degraded:
                         tool_name, result = degraded
                         duration_ms = int((time.time() - start_time) * 1000)
                         answer = (
-                            "⚠️ **Mode degrade** : le service IA (Groq) est temporairement "
+                            "⚠️ **Mode degrade** : le modele IA local (Ollama) est temporairement "
                             "indisponible, impossible de generer une reponse redigee. Voici "
                             f"les donnees brutes les plus pertinentes trouvees pour votre "
                             f"question (outil `{tool_name}`) :\n\n```json\n"
                             f"{json.dumps(result, ensure_ascii=False, indent=2, default=str)}\n```"
                         )
-                        logging.info(f"Mode degrade active -> {tool_name} (Groq indisponible)")
+                        logging.info(f"Mode degrade active -> {tool_name} (modele local indisponible)")
                         return {
                             "answer":      answer,
                             "tool_calls":  [{"tool": tool_name, "inputs": {}, "result_summary": str(result)[:200]}],
-                            "thinking":    thinking_log + [f"[mode degrade] Groq indisponible, routage mots-cles -> {tool_name}"],
+                            "thinking":    thinking_log + [f"[mode degrade] modele local indisponible, routage mots-cles -> {tool_name}"],
                             "tokens_used": 0,
                             "duration_ms": duration_ms,
                         }
@@ -854,9 +1000,39 @@ class MAEAgent:
 
                 msg = response.choices[0].message
 
+                # v2.5 -- garde-fou reponse vide : le modele local produit
+                # parfois un tour sans aucun tool_call ET sans contenu texte
+                # -- ni reponse, ni nouvelle action. Observe empiriquement
+                # qu un seul nouvel essai n est pas toujours suffisant (le
+                # tirage aleatoire du modele peut rester malchanceux deux
+                # fois de suite), d ou 2 essais au lieu d 1.
+                empty_retries = 0
+                while not msg.tool_calls and not (msg.content and msg.content.strip()) and empty_retries < 2:
+                    empty_retries += 1
+                    logging.warning(f"Reponse vide du modele local, nouvel essai ({empty_retries}/2)")
+                    try:
+                        response = self._call_llm_with_retry(messages)
+                        msg = response.choices[0].message
+                    except Exception:
+                        break
+
                 # ── Final answer — no tool calls ──────────────────
                 if not msg.tool_calls:
                     answer      = msg.content or "Aucune reponse generee."
+
+                    # v2.5 -- filet de securite anti-fabrication : le modele
+                    # local peut affirmer qu un rapport a ete genere (avec un
+                    # lien plausible mais invente) SANS avoir reellement
+                    # appele generate_report ce tour-ci -- observe
+                    # empiriquement (le fichier n existe jamais sur disque,
+                    # le lien renvoie "Rapport introuvable" cote frontend).
+                    # On retire tout lien de rapport qui ne correspond pas au
+                    # VRAI dernier rapport genere (last_report_url, capture
+                    # de facon fiable au moment de l execution de l outil,
+                    # pas depuis le texte du modele).
+                    for fake_url in REPORT_URL_RE.findall(answer):
+                        if fake_url != last_report_url:
+                            answer = answer.replace(fake_url, "")
 
                     # v2.3 — filet de securite : si un rapport a ete
                     # genere pendant ce tour et que l URL n apparait pas
@@ -864,7 +1040,7 @@ class MAEAgent:
                     # l ajoute nous-memes plutot que de faire confiance
                     # au LLM pour la recopier fidelement.
                     if last_report_url and last_report_url not in answer:
-                        answer = f"{answer}\n\n📄 Lien direct du rapport : {last_report_url}"
+                        answer = f"{answer}\n\nRapport généré : {last_report_url}"
 
                     duration_ms = int((time.time() - start_time) * 1000)
 
@@ -919,6 +1095,7 @@ class MAEAgent:
                 })
 
                 # Execute each tool
+                repeat_detected = False
                 for tc in msg.tool_calls:
                     tool_name = tc.function.name
                     try:
@@ -937,15 +1114,52 @@ class MAEAgent:
                     )
                     logging.info(f"Tool call: {tool_name} | inputs: {tool_inputs}")
 
-                    fn = self.tools_map.get(tool_name)
-                    if fn:
-                        try:
-                            result = fn(**tool_inputs)
-                        except Exception as e:
-                            result = {"error": str(e), "tool": tool_name}
-                            logging.error(f"Tool error {tool_name}: {e}")
+                    tool_name_counts[tool_name] = tool_name_counts.get(tool_name, 0) + 1
+                    if tool_name_counts[tool_name] > MAX_SAME_TOOL_CALLS:
+                        repeat_detected = True
+
+                    sig = (tool_name, json.dumps(tool_inputs, sort_keys=True, ensure_ascii=False))
+                    if sig in called_signatures:
+                        repeat_detected = True
+                        # Certains outils (segments, compare_agencies...) renvoient une
+                        # LISTE et non un dict -- on enveloppe systematiquement plutot
+                        # que de muter/copier la structure d origine, quel que soit son
+                        # type (dict(list_de_dicts) leve une ValueError sinon).
+                        result = {
+                            "resultat_deja_obtenu": called_signatures[sig],
+                            "_note": (
+                                "Resultat identique deja fourni precedemment dans cette "
+                                "reponse -- ne rappelle pas cet outil avec les memes "
+                                "parametres, reponds directement a partir de ce resultat."
+                            ),
+                        }
+                        logging.warning(f"Appel duplique detecte, reutilisation du cache: {tool_name}({tool_inputs})")
                     else:
-                        result = {"error": f"Outil inconnu: {tool_name}"}
+                        fn = self.tools_map.get(tool_name)
+                        if fn:
+                            # v2.5 -- le modele local invente parfois un
+                            # parametre inexistant en confondant un CHAMP DE
+                            # RESULTAT d un outil (ex: "csp", "branches") avec
+                            # un parametre d ENTREE valide, ce qui levait un
+                            # TypeError et gachait un tour entier (observe sur
+                            # profil_clients et branch_analysis, qui ne
+                            # prennent quasi aucun parametre). On ignore
+                            # silencieusement les cles non reconnues par la
+                            # signature reelle de la fonction plutot que
+                            # d echouer sur un nom invente.
+                            valid_params = set(inspect.signature(fn).parameters)
+                            unknown = set(tool_inputs) - valid_params
+                            if unknown:
+                                logging.warning(f"Parametre(s) invente(s) ignore(s) pour {tool_name}: {unknown}")
+                                tool_inputs = {k: v for k, v in tool_inputs.items() if k in valid_params}
+                            try:
+                                result = fn(**tool_inputs)
+                            except Exception as e:
+                                result = {"error": str(e), "tool": tool_name}
+                                logging.error(f"Tool error {tool_name}: {e}")
+                        else:
+                            result = {"error": f"Outil inconnu: {tool_name}"}
+                        called_signatures[sig] = result
 
                     # v2.3 — capture l URL du rapport des qu il est genere
                     # avec succes, independamment de ce que le modele fera
@@ -970,6 +1184,41 @@ class MAEAgent:
                         "tool_call_id": tc.id,
                         "content":      tool_result_json,
                     })
+
+                # v2.5 -- garde-fou anti-boucle (suite) : des qu un appel duplique
+                # est detecte, on a constate empiriquement (Qwen2.5-3B) que le
+                # modele ne se rattrape pas tout seul dans les iterations
+                # suivantes (observe : 8/8 iterations consommees pour rien). On
+                # arrete donc immediatement au lieu d epuiser max_iterations, et
+                # on renvoie une reponse de secours construite a partir des
+                # VRAIES donnees deja obtenues plutot qu un message d erreur sec.
+                if repeat_detected:
+                    duration_ms = int((time.time() - start_time) * 1000)
+                    donnees = {t_name: t_result for (t_name, _args), t_result in called_signatures.items()}
+                    answer = (
+                        "**Reponse partielle** : le modele local a rappele plusieurs fois "
+                        "le meme outil sans parvenir a rediger de synthese. Voici les "
+                        "donnees reelles obtenues directement depuis le portefeuille :\n\n"
+                        f"{_format_fallback_data(donnees)}"
+                    )
+                    if mlflow_active:
+                        try:
+                            mlflow.log_metric("duration_ms", duration_ms)
+                            mlflow.log_metric("iterations",  iteration + 1)
+                            mlflow.log_metric("tool_calls",  len(tool_calls_log))
+                            mlflow.log_metric("error",       0)
+                            mlflow.log_metric("repeat_loop_fallback", 1)
+                        except Exception:
+                            pass
+                    logging.warning(f"Boucle d appel repete detectee -> reponse de secours ({list(donnees.keys())})")
+                    _remember_analysis(user_message, answer, [t["tool"] for t in tool_calls_log])
+                    return {
+                        "answer":      answer,
+                        "tool_calls":  tool_calls_log,
+                        "thinking":    thinking_log + ["[garde-fou boucle] appel duplique detecte -> reponse de secours avec donnees reelles"],
+                        "tokens_used": 0,
+                        "duration_ms": duration_ms,
+                    }
 
                 # Continue loop — model will now reason with tool results
                 continue

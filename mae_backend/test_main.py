@@ -21,32 +21,48 @@ import main
 
 
 # ════════════════════════════════════════════════════════════════
-# tool_forecast() — invariant central : total_2026 == base * 1.047
+# tool_forecast() — invariant central : total_12_mois == base * (1 + FORECAST_GROWTH_RATE)
 # ════════════════════════════════════════════════════════════════
 def test_tool_forecast_total_matches_growth_formula():
     main.state["ca_total_reel"] = 1_000_000.0
     result = main.tool_forecast()
-    expected = 1_000_000.0 * 1.047
+    expected = 1_000_000.0 * (1 + main.FORECAST_GROWTH_RATE)
     # Tolerance liee aux arrondis a 2 decimales appliques sur chaque mois
     # avant sommation (round(ca, 2) x12), pas un simple round() global.
-    assert math.isclose(result["total_2026"], expected, rel_tol=1e-4)
+    assert math.isclose(result["total_12_mois"], expected, rel_tol=1e-4)
 
 
 def test_tool_forecast_single_month_within_annual_total():
     main.state["ca_total_reel"] = 1_000_000.0
     annuel  = main.tool_forecast()
     mensuel = main.tool_forecast(mois_num=6)
-    assert 0 < mensuel["ca_prev"] < annuel["total_2026"]
+    assert 0 < mensuel["ca_prev"] < annuel["total_12_mois"]
 
 
 def test_tool_forecast_confidence_interval_widens_with_horizon():
     # Verifie que l'intervalle de confiance dynamique (voir ci_width_for_month
     # dans main.py) s'elargit bien avec l'horizon, et n'est pas revenu a un
-    # pourcentage fixe par accident lors d'un futur refactoring.
-    main.state["ca_total_reel"] = 1_000_000.0
-    janvier  = main.tool_forecast(mois_num=1)
-    decembre = main.tool_forecast(mois_num=12)
-    assert janvier["ci_width_pct"] < decembre["ci_width_pct"]
+    # pourcentage fixe par accident lors d'un futur refactoring. Teste
+    # directement les indices d'horizon (0=premier mois prevu, 11=dernier),
+    # PAS des numeros de mois calendaires fixes -- la prevision demarre
+    # desormais au mois prochain reel (voir forecast_calendar), donc
+    # "Janvier"/"Decembre" ne correspondent plus forcement au 1er/12e mois.
+    assert main.ci_width_for_month(0) < main.ci_width_for_month(11)
+
+
+def test_forecast_calendar_starts_next_real_month():
+    from datetime import datetime
+    today = datetime(2026, 8, 14)
+    calendar = main.forecast_calendar(today=today)
+    assert (calendar[0]["mois_num"], calendar[0]["annee"]) == (9, 2026)
+    assert (calendar[-1]["mois_num"], calendar[-1]["annee"]) == (8, 2027)
+
+
+def test_forecast_calendar_wraps_year_at_december():
+    from datetime import datetime
+    today = datetime(2026, 12, 5)
+    calendar = main.forecast_calendar(today=today)
+    assert (calendar[0]["mois_num"], calendar[0]["annee"]) == (1, 2027)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -78,8 +94,12 @@ def test_normalize_agence_dedupes_accents_and_case():
 
 
 def test_normalize_agence_applies_known_overrides():
-    assert main.normalize_agence("sfax")  == "Sfax Ville"
-    assert main.normalize_agence("tunis") == "Tunis Centre"
+    # Depuis le passage aux 77 vraies agences MAE (plusieurs par ville,
+    # ex. "Sfax 1".."Sfax 5"), il n'y a plus UNE seule agence par ville --
+    # normalize_agence fait donc une correspondance par prefixe generique
+    # sur la liste reelle plutot qu'une table d'alias figee ville->agence.
+    assert main.normalize_agence("sfax").lower().startswith("sfax")
+    assert main.normalize_agence("tunis").lower().startswith("tunis")
 
 
 def test_normalize_agence_passthrough_for_unknown_agence():

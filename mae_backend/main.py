@@ -23,9 +23,9 @@ Changelog v3.3 (2026-07, fix rapports PDF) :
   quand utiliser ces parametres".
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
@@ -36,6 +36,10 @@ import time
 import random
 import unicodedata
 import logging
+import hashlib
+import hmac
+import json
+import secrets
 from datetime import datetime, timedelta
 import mlflow
 from fastapi.responses import FileResponse
@@ -49,12 +53,195 @@ app = FastAPI(title="MAE Intelligence API", version="3.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # allow_credentials=False : l'authentification se fait par jeton dans
+    # l'en-tete Authorization (ou en parametre ?token= pour les liens de
+    # rapport), pas par cookie -- allow_credentials=True combine a
+    # allow_origins="*" est une configuration invalide/dangereuse (le
+    # navigateur l'accepte silencieusement dans certains cas) sans meme
+    # apporter de benefice ici puisqu'aucun cookie n'est utilise.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 mlflow.set_tracking_uri("mlruns")
+
+# ════════════════════════════════════════════════════════════════
+# AUTHENTIFICATION (remarque superviseur : securiser l'agent/l'API)
+# ════════════════════════════════════════════════════════════════
+# AVANT ce correctif : le "login" (admin/mae2026, dg.mae/direction) etait
+# verifie ENTIEREMENT cote frontend (mae_frontend/index.html), mots de
+# passe en clair directement lisibles dans le JS servi au navigateur
+# (View Source), et AUCUN endpoint de cette API ne verifiait quoi que ce
+# soit -- n'importe qui pouvait appeler /api/agent, /api/reports/*, etc.
+# directement (curl, Postman...) sans jamais passer par la page de
+# connexion. Le "login" etait donc purement cosmetique du point de vue de
+# la securite reelle -- pas une vraie barriere d'acces.
+#
+# Correctif : verification cote SERVEUR, mots de passe stockes HASHES
+# (PBKDF2-HMAC-SHA256 + sel, jamais en clair), jetons de session en
+# memoire avec expiration, middleware qui bloque toute route /api/*
+# (sauf /api/login) sans jeton valide. Le frontend envoie le jeton recu a
+# la connexion dans l'en-tete Authorization sur chaque appel fetch(), et
+# en parametre ?token= pour les liens de rapport (une simple balise <a>
+# ne peut pas ajouter d'en-tete personnalise -- necessaire pour que les
+# boutons Visualiser/Telecharger restent de vrais liens cliquables).
+SESSION_TTL_HOURS = 12
+_sessions = {}  # token -> {"username", "role", "name", "expires"}
+
+def _hash_password(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
+
+# Sel fixe par utilisateur : suffisant ici (2 comptes internes geres a la
+# main, pas une base d'utilisateurs publique avec inscription) -- le point
+# important est que les mots de passe ne soient plus stockes/visibles EN
+# CLAIR (c'etait le vrai probleme, pas la force du sel).
+_USERS = {
+    "admin":  {"salt": "mae-admin-2026-salt", "role": "admin", "name": "Administrateur",
+               "password_hash": _hash_password("mae2026", "mae-admin-2026-salt")},
+    "dg.mae": {"salt": "mae-dg-2026-salt",    "role": "dg",    "name": "Direction Générale",
+               "password_hash": _hash_password("direction", "mae-dg-2026-salt")},
+}
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+# Comptes "Direction Generale" crees dynamiquement par l'admin (page
+# Administration). AVANT ce correctif : geres UNIQUEMENT dans le
+# localStorage du navigateur de l'admin (mots de passe en clair, pas de
+# backend du tout) -- un compte cree ne pouvait de toute facon jamais
+# s'authentifier reellement puisqu'aucun endpoint ne verifiait quoi que ce
+# soit. Persistes maintenant cote serveur (hashes, jamais en clair),
+# fichier JSON simple -- coherent avec l'echelle du projet (une poignee de
+# comptes geres a la main), pas besoin d'une vraie base de donnees.
+_DYNAMIC_USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dynamic_users.json")
+
+def _load_dynamic_users():
+    if os.path.exists(_DYNAMIC_USERS_FILE):
+        try:
+            with open(_DYNAMIC_USERS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def _save_dynamic_users(users):
+    with open(_DYNAMIC_USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+_dynamic_users = _load_dynamic_users()
+
+
+def _get_session(request: Request):
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    if not token:
+        token = request.query_params.get("token", "")
+    return _sessions.get(token)
+
+
+def _require_admin(request: Request):
+    session = _get_session(request)
+    if not session or session["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Reserve a l'administrateur.")
+    return session
+
+
+@app.post("/api/login")
+def login(req: LoginRequest):
+    user = _USERS.get(req.username) or _dynamic_users.get(req.username)
+    candidate_hash = _hash_password(req.password, user["salt"]) if user else ""
+    # hmac.compare_digest (temps constant) meme si user est introuvable
+    # (candidate_hash="" compare quand meme) -- evite qu'un attaquant
+    # distingue "utilisateur inconnu" de "mot de passe incorrect" via le
+    # temps de reponse.
+    if not user or not hmac.compare_digest(candidate_hash, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Identifiants invalides.")
+    token = secrets.token_urlsafe(32)
+    _sessions[token] = {
+        "username": req.username, "role": user["role"], "name": user["name"],
+        "expires": datetime.now() + timedelta(hours=SESSION_TTL_HOURS),
+    }
+    return {"token": token, "role": user["role"], "name": user["name"]}
+
+
+@app.post("/api/logout")
+def logout(request: Request):
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    _sessions.pop(token, None)
+    return {"ok": True}
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    password: str
+    name: str
+
+
+@app.get("/api/admin/users")
+def list_users(request: Request):
+    _require_admin(request)
+    return [{"username": u, "name": v["name"], "role": "dg"} for u, v in _dynamic_users.items()]
+
+
+@app.post("/api/admin/users")
+def create_user(req: CreateUserRequest, request: Request):
+    _require_admin(request)
+    username = req.username.strip()
+    if not username or not req.name.strip():
+        raise HTTPException(status_code=400, detail="Nom et identifiant requis.")
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Mot de passe minimum 6 caracteres.")
+    if username in _USERS or username in _dynamic_users:
+        raise HTTPException(status_code=409, detail="Cet identifiant existe deja.")
+    salt = secrets.token_hex(16)
+    _dynamic_users[username] = {
+        "salt": salt, "password_hash": _hash_password(req.password, salt),
+        "role": "dg", "name": req.name.strip(),
+    }
+    _save_dynamic_users(_dynamic_users)
+    return {"username": username, "name": req.name.strip(), "role": "dg"}
+
+
+@app.delete("/api/admin/users/{username}")
+def delete_user(username: str, request: Request):
+    _require_admin(request)
+    if username not in _dynamic_users:
+        raise HTTPException(status_code=404, detail="Compte introuvable.")
+    del _dynamic_users[username]
+    _save_dynamic_users(_dynamic_users)
+    # Invalide toute session active de ce compte -- sinon un utilisateur
+    # supprime resterait connecte jusqu'a expiration naturelle du jeton.
+    for tok in [t for t, s in _sessions.items() if s["username"] == username]:
+        del _sessions[tok]
+    return {"ok": True}
+
+
+_PUBLIC_API_PATHS = {"/api/login"}
+
+@app.middleware("http")
+async def require_auth(request: Request, call_next):
+    # Les preflights CORS (OPTIONS) ne portent jamais l'en-tete Authorization
+    # (le navigateur les envoie avant la vraie requete pour demander la
+    # permission) -- les bloquer ici les empeche d'atteindre CORSMiddleware,
+    # qui doit repondre en premier. Sans ce court-circuit, TOUS les appels
+    # avec un en-tete personnalise (Authorization) echouaient avec une
+    # erreur CORS avant meme d'atteindre la verification du jeton.
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    path = request.url.path
+    if not path.startswith("/api/") or path in _PUBLIC_API_PATHS:
+        return await call_next(request)
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    if not token:
+        token = request.query_params.get("token", "")
+    session = _sessions.get(token)
+    if not session or session["expires"] < datetime.now():
+        _sessions.pop(token, None)
+        return JSONResponse(status_code=401, content={"detail": "Authentification requise ou session expiree."})
+    return await call_next(request)
 
 # ════════════════════════════════════════════════════════════════
 # BASE URL — utilisee pour construire des liens ABSOLUS et cliquables
@@ -63,9 +250,24 @@ mlflow.set_tracking_uri("mlruns")
 # ════════════════════════════════════════════════════════════════
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
-AGENCES  = ["Sfax Ville","Tunis Centre","Sousse","Nabeul","Bizerte",
-            "Gabes","Sfax Nord","Monastir","Ariana","Gafsa",
-            "Kairouan","Medenine","Jendouba","Beja","Tozeur"]
+# Liste des agences pour le simulateur "live" (nouveaux contrats simules) --
+# lue depuis les vraies donnees nettoyees (77 agences reelles, voir
+# 02_cleaning.py / MAE_AGENCY_NAMES) plutot qu'une liste a part codee en dur
+# ici : l'ancienne liste (15 noms, dont certains partiellement synthetiques
+# type "Sfax Nord") ne recoupait aucun des vrais noms d'agence desormais
+# dans le CSV, ce qui aurait fait cohabiter deux conventions de nommage
+# differentes sur le meme tableau de bord (flux live vs donnees reelles).
+try:
+    _agence_counts = pd.read_csv(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "processed_data", "Production_Cleaned.csv"),
+        usecols=["AGENCE"]
+    )["AGENCE"].value_counts(normalize=True)
+    AGENCES = _agence_counts.index.tolist()
+    AGENCE_WEIGHTS_REELLES = _agence_counts.values.tolist()
+except Exception:
+    AGENCES = ["Tunis Centre", "Sousse 1", "Nabeul 1", "Bizerte", "Béja",
+               "Gabès 1", "Monastir 1", "Ariana", "Gafsa 1", "Sfax 1"]
+    AGENCE_WEIGHTS_REELLES = None
 
 BRANCHE_LABELS = {
     '11':  'Tourisme',
@@ -125,28 +327,54 @@ MOIS_LABELS = ["Jan","Fev","Mar","Avr","Mai","Jun","Jul","Aou","Sep","Oct","Nov"
 
 _bw = [0.857,0.06,0.04,0.02,0.015,0.008]; _bs = sum(_bw)
 BRANCH_WEIGHTS = [x/_bs for x in _bw]
-_aw = [0.12,0.11,0.09,0.08,0.07,0.07,0.06,0.06,0.06,0.05,0.05,0.05,0.05,0.05,0.04]; _as = sum(_aw)
-AGENCE_WEIGHTS = [x/_as for x in _aw]
+if AGENCE_WEIGHTS_REELLES is not None:
+    AGENCE_WEIGHTS = AGENCE_WEIGHTS_REELLES
+else:
+    AGENCE_WEIGHTS = [1.0 / len(AGENCES)] * len(AGENCES)
 
-TOTAL_CONTRATS_REEL = 342883
+TOTAL_CONTRATS_REEL = 285736
 
 # Parametres du generateur synthetique de PRIME_NETTE pour les NOUVEAUX
-# contrats simules (simulator() et le fallback _gen_synthetic()). Avant ce
-# correctif, lognormal(7.5, 1.2) clippe [200, 80000] produisait une moyenne
-# simulee de ~3758 TND contre ~571 TND dans les vraies donnees (Production_
-# Cleaned.csv, 342883 lignes) -- soit 6.6x trop eleve. Consequence directe :
-# compute_data_drift() compare la moyenne des 50 derniers contrats a cette
-# reference reelle, donc des que la fenetre des 50 derniers est remplie de
-# contrats simules (~50 x 5s = ~4min apres le demarrage), l'alerte de derive
-# se declenchait a coup sur ET NE SE RESORBAIT JAMAIS -- ce n'etait pas de
-# la derive detectee, juste un generateur mal calibre. Valeurs ci-dessous
-# ajustees par methode des moments pour reproduire moyenne/ecart-type reels
-# (~571 / ~719 TND) ; verifie empiriquement : moyenne simulee obtenue ~568,
-# mediane ~357 (vs ~385 reel) sur 50k tirages.
-PRIME_SIM_LOGNORMAL_MU    = 5.87
-PRIME_SIM_LOGNORMAL_SIGMA = 0.97
-PRIME_SIM_MIN_TND         = 50.0
-PRIME_SIM_MAX_TND         = 70000.0
+# contrats simules (simulator() et le fallback _gen_synthetic()).
+#
+# RECALIBRE (remarque superviseur, feature engineering) : suite au passage
+# de RAW_TO_DINARS a 1000 (vraie sous-unite du dinar, /1000 -- voir
+# 02_cleaning.py) au lieu de l'ancien diviseur cale sur une moyenne externe
+# (88), la moyenne reelle par LIGNE de PRIME_NETTE est tombee de ~571 TND a
+# ~57 TND (chaque ligne = une garantie au sein d'une police, pas la police
+# entiere -- voir 02_cleaning.py). L'ancienne calibration (mu=5.87) restait
+# donc figee sur l'ancienne echelle : le generateur produisait des contrats
+# simules ~10x trop eleves par rapport aux vraies donnees, ce qui declenchait
+# une fausse alerte de derive permanente des que la fenetre des 50 derniers
+# contrats se remplissait de valeurs simulees.
+#
+# Valeurs recalculees par methode des moments sur la distribution reelle
+# actuelle (Production_Cleaned.csv, 285 736 lignes, moyenne 57,12 / ecart-type
+# 72,38 TND) : CV = 72,38/57,12 ≈ 1,267 -> sigma = sqrt(ln(1+CV²)) ≈ 0,979,
+# mu = ln(moyenne) - sigma²/2 ≈ 3,566. Verifie empiriquement : moyenne
+# simulee obtenue ~57,2, ecart-type ~72,8 (sur 200k tirages) -- coherent.
+PRIME_SIM_LOGNORMAL_MU    = 3.566
+PRIME_SIM_LOGNORMAL_SIGMA = 0.979
+PRIME_SIM_MIN_TND         = 1.0
+PRIME_SIM_MAX_TND         = 6500.0
+
+# Meme probleme, jamais corrige a l'epoque : le generateur de REGLEMENTS
+# simules (simulator() et _gen_synthetic_sin()) etait reste sur
+# lognormal(7.8, 1.3) clippe [500, 200000] -- calibre sur l'ancienne
+# echelle d'avant le passage a REGLEMENTS_TO_DINARS=3234.7 (voir 02_cleaning
+# .py). Consequence : moyenne simulee ~5680 TND contre ~819 TND reel (donnees
+# completes, Sinistres_Cleaned.csv) -- un sinistre simule ~7x trop eleve. Ça
+# faisait deriver ca_total_reel et sin_total_reel a des rythmes differents
+# (l'un correctement recalibre, l'autre non), donc le ratio sinistres/primes
+# affiche sur le tableau de bord (/api/kpis) grimpait avec le temps de
+# fonctionnement du serveur au lieu de rester stable autour de 62-63%.
+# Valeurs recalculees par methode des moments (memes donnees, moyenne 818,59 /
+# ecart-type 3438,78 TND) : CV ≈ 4,20 -> sigma ≈ 1,710, mu ≈ 5,245. Verifie
+# empiriquement : moyenne simulee ~787 TND sur 200k tirages -- coherent.
+REGLEMENTS_SIM_LOGNORMAL_MU    = 5.245
+REGLEMENTS_SIM_LOGNORMAL_SIGMA = 1.710
+REGLEMENTS_SIM_MIN_TND         = 1.0
+REGLEMENTS_SIM_MAX_TND         = 240000.0
 
 # Seuil de ratio sinistres/primes (S/P) individuel au-dela duquel un client
 # est considere a risque. Partage entre detect_anomalies() (comptage) et
@@ -159,12 +387,32 @@ RISK_RATIO_THRESHOLD_PCT = 150.0
 # partielle ou un avenant isole) produit un ratio S/P demesurement gonfle
 # des qu'un sinistre meme modeste lui est rattache, simplement parce que le
 # denominateur est proche de zero -- ce n'est pas un signal de risque
-# exploitable. Le plancher (fixe au 25e percentile approx. des primes
-# observees) l'exclut pour garder une liste presentable et defendable
-# devant un jury. Distinct de RISK_EXCEPTIONNEL_THRESHOLD_PCT ci-dessous,
-# qui traite un autre cas : un denominateur normal mais un sinistre reel
-# exceptionnellement eleve.
-MIN_CA_FOR_RISK_TND = 200.0
+# exploitable. Un plancher a 200 TND (25e percentile approx.) laissait encore
+# passer des cas extremes (ex: un client a 875 TND affichant un ratio a
+# 311 395% une fois REGLEMENTS correctement calibre -- voir 02_cleaning.py).
+# Remonte a la prime auto moyenne reelle en Tunisie (766,50 TND/an, meme
+# reference que RAW_TO_DINARS -- Managers.tn, 2021) : sous ce seuil, le
+# client n'a pas paye l'equivalent d'une annee de prime moyenne, le
+# denominateur reste trop instable pour un ratio individuel exploitable.
+# Distinct de RISK_EXCEPTIONNEL_THRESHOLD_PCT ci-dessous, qui traite un
+# autre cas : un denominateur normal mais un sinistre reel exceptionnellement
+# eleve.
+MIN_CA_FOR_RISK_TND = 766.5
+
+# Meme probleme, cote AGENCE plutot que client (remarque superviseur) : depuis
+# le passage aux 77/74 vraies agences MAE (au lieu des 10 anciennes, qui
+# agregaient chacune des milliers de contrats et lissaient ce risque), une
+# poignee de tres petites agences (5 en ont moins de 50 contrats, ex.
+# "Al Djazira" avec seulement 2) peuvent afficher un ratio S/P a plusieurs
+# milliers de % du simple fait d'un denominateur quasi nul -- ce qui ecrasait
+# visuellement le graphique "Ratio Sinistres/Primes par Agence" (axe force a
+# une echelle enorme, toutes les vraies barres devenant invisibles). Meme
+# logique que MIN_CA_FOR_RISK_TND : exclure du classement les agences dont
+# l'exposition est trop faible pour qu'un ratio soit exploitable. 50 contrats
+# laisse 72 des 77 agences (seules 5 exclues), coherent avec le seuil de
+# "semaine dense" (>100 lignes) deja utilise dans 04_forecasting.py pour le
+# meme type de probleme (exclure un volume trop faible pour etre fiable).
+MIN_CONTRATS_FOR_AGENCE_RATIO = 50
 
 # Seuil au-dela duquel un ratio S/P n'est plus juste "eleve" mais reflete
 # probablement UN sinistre catastrophique isole plutot qu'un pattern de
@@ -208,25 +456,23 @@ def _strip_accents(s: str) -> str:
     )
 
 _AGENCE_CANONICAL = {_strip_accents(a).lower(): a for a in AGENCES}
-_AGENCE_OVERRIDES = {
-    "sfax":           "Sfax Ville",
-    "sfax ville":     "Sfax Ville",
-    "sfax nord":      "Sfax Nord",
-    "gabes":          "Gabes",
-    "beja":           "Beja",
-    "tunis":          "Tunis Centre",
-    "tunis centre":   "Tunis Centre",
-}
 
 def normalize_agence(raw) -> str:
+    # Plus de table d'alias codee en dur (ex. "sfax"->"Sfax Ville") : depuis
+    # le passage aux 77 vraies agences MAE (voir 02_cleaning.py), plusieurs
+    # agences reelles partagent une meme ville (Sfax 1..5, Gabes 1..4...),
+    # donc une correspondance exacte ville->agence unique n'a plus de sens.
+    # Correspondance par prefixe generique a la place : "sfax" -> la
+    # premiere agence dont le nom commence par "sfax" (ou l'inverse).
     if not raw or (isinstance(raw, float) and np.isnan(raw)):
         return random.choice(AGENCES)
     s = str(raw).strip()
     key = _strip_accents(s).lower()
-    if key in _AGENCE_OVERRIDES:
-        return _AGENCE_OVERRIDES[key]
     if key in _AGENCE_CANONICAL:
         return _AGENCE_CANONICAL[key]
+    for canon_key, name in _AGENCE_CANONICAL.items():
+        if canon_key.startswith(key) or key.startswith(canon_key):
+            return name
     return s
 
 
@@ -326,6 +572,8 @@ state = {
     "nb_contrats_reel":  0,
     "ca_by_month_reel":  {},
     "sin_total_reel":    0.0,
+    "sin_by_month_reel": {},
+    "segments_summary":  [],
 }
 
 def seed_data():
@@ -414,7 +662,21 @@ def seed_data():
 
             state["sin_total_reel"] = float(df_sin_full["REGLEMENTS"].sum())
 
-            _cols_sin_full = [c for c in ["N_CLIENT", "AGENCE", "REGLEMENTS"] if c in df_sin_full.columns]
+            if "DATE_ACCIDENT" in df_sin_full.columns:
+                _mois_sin = pd.to_datetime(df_sin_full["DATE_ACCIDENT"], errors="coerce").dt.month
+                df_sin_full["MOIS"] = _mois_sin
+                # Meme principe que ca_by_month_reel (Production) : agrege sur
+                # le fichier COMPLET, pas l'echantillon 3k utilise par le flux
+                # simule -- /api/ca-by-month affichait un total sinistres
+                # quasi-nul faute de cet agregat (bar quasi invisible sur le
+                # graphique "Evolution Mensuelle" du dashboard).
+                state["sin_by_month_reel"] = (
+                    df_sin_full.dropna(subset=["MOIS"]).groupby("MOIS")["REGLEMENTS"].sum().to_dict()
+                )
+            else:
+                state["sin_by_month_reel"] = {}
+
+            _cols_sin_full = [c for c in ["N_CLIENT", "AGENCE", "REGLEMENTS", "MOIS", "TRANSACTION"] if c in df_sin_full.columns]
             state["sin_full_df"] = df_sin_full[_cols_sin_full].copy()
 
             sample_size = min(3000, len(df_sin_full))
@@ -436,6 +698,103 @@ def seed_data():
         _gen_synthetic_sin()
 
     state["total_generated"] = len(state["contrats"])
+    state["segments_summary"] = load_segments()
+
+
+# Degrades de vert (identite visuelle du reste du dashboard) plutot qu'une
+# palette arc-en-ciel -- du plus fonce (segment le plus haut en CA) au plus
+# clair, pour rester coherent avec le reste de l'app.
+SEGMENT_COLORS = ["#0b3d1f", "#156b32", "#1a7a3a", "#2ea84f", "#4cba6a", "#7fd99a", "#b5ead7"]
+
+def load_segments():
+    """
+    Lit outputs/segments_clients.csv (sortie reelle de 05_clustering.py) et
+    agrege un resume par segment -- remplace deux anciens tableaux figes a
+    la main (ici et dans /api/segments), deconnectes du clustering reel :
+    nombre de segments, noms et chiffres ne bougeaient jamais meme apres un
+    re-clustering. Source unique partagee par tool_segments() (agent) et
+    /api/segments (dashboard).
+    """
+    path = "../outputs/segments_clients.csv"
+    if not os.path.exists(path):
+        print("⚠️  segments_clients.csv introuvable -> executer 05_clustering.py")
+        return []
+    try:
+        df = pd.read_csv(path)
+        # Ratio sinistres/primes AGREGE par segment (somme/somme, pas une
+        # moyenne de ratios individuels) -- meme methode que le ratio S/P
+        # global du portefeuille et que le nommage "Client a Risque" dans
+        # 05_clustering.py, pour rester coherent (remarque superviseur :
+        # utiliser le fichier Sinistres au-dela de l'EDA/dashboard).
+        sums = df.groupby('Segment_Label')[['CA_TOTAL', 'TOTAL_REGLEMENTS']].sum()
+        g = df.groupby('Segment_Label').agg(
+            nb_clients=('N_CLIENT', 'count'),
+            ca_moyen=('CA_TOTAL', 'mean'),
+            bm_moyen=('BONUS_MALUS_MOY', 'mean'),
+            nb_contrats_moyen=('NB_CONTRATS', 'mean'),
+        ).reset_index()
+        g['ratio_sp_pct'] = (sums['TOTAL_REGLEMENTS'] / sums['CA_TOTAL'] * 100).values
+
+        # Niveau de risque relatif a la moyenne/dispersion du ratio S/P
+        # agrege TOUS segments confondus (pas un seuil fixe choisi a la main).
+        ratio_mean = g['ratio_sp_pct'].mean()
+        ratio_std  = g['ratio_sp_pct'].std()
+        def risque_label(ratio):
+            if ratio >= ratio_mean + 0.5 * ratio_std: return "Eleve"
+            if ratio <= ratio_mean - 0.5 * ratio_std: return "Faible"
+            return "Modere"
+        g['risque'] = g['ratio_sp_pct'].apply(risque_label)
+        g = g.sort_values('ca_moyen', ascending=False).reset_index(drop=True)
+
+        return [{
+            "segment":           row['Segment_Label'],
+            "nb_clients":        int(row['nb_clients']),
+            "ca_moyen":          round(row['ca_moyen'], 2),
+            "bm_moyen":          round(row['bm_moyen'], 2),
+            "nb_contrats_moyen": round(row['nb_contrats_moyen'], 2),
+            "ratio_sp_pct":      round(row['ratio_sp_pct'], 1),
+            "risque":            row['risque'],
+            "color":             SEGMENT_COLORS[i % len(SEGMENT_COLORS)],
+            "description":       f"{row['nb_contrats_moyen']:.1f} contrats/client en moyenne, "
+                                   f"ratio sinistres/primes {row['ratio_sp_pct']:.1f}%",
+        } for i, row in g.iterrows()]
+    except Exception as e:
+        print(f"⚠️  segments_clients.csv ({e}) -> segments non charges")
+        return []
+
+
+def load_accidents_forecast():
+    """
+    Lit outputs/previsions_accidents_12mois.csv (sortie de 08_accidents_
+    forecasting.py) -- prevision du NOMBRE d'accidents/mois, PAS le montant
+    regle (06_sinistres_forecasting.py, abandonne : restait plat quel que
+    soit le modele). Le nombre d'accidents a un comportement different (CV
+    ~0.06 contre ~1.27 pour le montant, tendance a la hausse detectable,
+    +9 accidents/mois -- voir le script) : Holt (tendance) l'emporte
+    nettement sur un backtest a horizon complet (RMSE 34.6 contre 59-68 pour
+    les modeles plats), donc la prevision est une vraie ligne croissante,
+    pas un artefact.
+    Remarque superviseur : retire le graphique d'importance des variables
+    (encore un detail de mecanique de modele, pas un contenu pour la
+    Direction Generale) et le remplace par cette prevision -- un vrai
+    graphe de tendance/prevision, la demande initiale.
+    """
+    path = "../outputs/previsions_accidents_12mois.csv"
+    if not os.path.exists(path):
+        print("⚠️  previsions_accidents_12mois.csv introuvable -> executer 08_accidents_forecasting.py")
+        return []
+    try:
+        df = pd.read_csv(path)
+        calendar = forecast_calendar(periods=len(df))
+        return [{
+            "mois":        MOIS_LABELS[c["mois_num"] - 1],
+            "accidents":   int(df.iloc[c["i"]]["Accidents_Prevus"]),
+            "borne_basse": int(df.iloc[c["i"]]["Borne_Basse"]),
+            "borne_haute": int(df.iloc[c["i"]]["Borne_Haute"]),
+        } for c in calendar]
+    except Exception as e:
+        print(f"⚠️  previsions_accidents_12mois.csv ({e}) -> non chargee")
+        return []
 
 
 def _gen_synthetic(n=5000):
@@ -472,7 +831,7 @@ def _gen_synthetic_sin(n=1000):
         records.append({
             "N_CLIENT":    random.randint(1, 5000),
             "AGENCE":      np.random.choice(AGENCES, p=AGENCE_WEIGHTS),
-            "REGLEMENTS":  float(np.clip(np.random.lognormal(7.8, 1.3), 500, 200000)),
+            "REGLEMENTS":  float(np.clip(np.random.lognormal(REGLEMENTS_SIM_LOGNORMAL_MU, REGLEMENTS_SIM_LOGNORMAL_SIGMA), REGLEMENTS_SIM_MIN_TND, REGLEMENTS_SIM_MAX_TND)),
             "TRANSACTION": np.random.choice(["REGLEMENT", "EN COURS", "EXPERTISE"], p=[0.55, 0.30, 0.15]),
             "MOIS":        random.randint(1, 12),
             "timestamp":   (datetime.now() - timedelta(days=random.randint(0, 364))).isoformat(),
@@ -512,7 +871,7 @@ def simulator(interval_seconds: int = 5):
                 new_s = {
                     "N_CLIENT":    new_c["N_CLIENT"],
                     "AGENCE":      new_c["AGENCE"],
-                    "REGLEMENTS":  float(np.clip(np.random.lognormal(7.8, 1.3), 500, 200000)),
+                    "REGLEMENTS":  float(np.clip(np.random.lognormal(REGLEMENTS_SIM_LOGNORMAL_MU, REGLEMENTS_SIM_LOGNORMAL_SIGMA), REGLEMENTS_SIM_MIN_TND, REGLEMENTS_SIM_MAX_TND)),
                     "TRANSACTION": np.random.choice(["REGLEMENT", "EN COURS", "EXPERTISE"], p=[0.55, 0.30, 0.15]),
                     "MOIS":        mois,
                     "timestamp":   datetime.now().isoformat(),
@@ -596,7 +955,13 @@ def compute_data_drift():
 
 
 def apply_filters(df, agence=None, region=None, branche=None, mois=None):
-    if agence  and agence  != "all" and "AGENCE"  in df.columns: df = df[df["AGENCE"]  == agence]
+    # normalize_agence() fait une correspondance exacte puis par prefixe (ex:
+    # "Sousse" -> "Sousse 1") -- sans cet appel, un nom d'agence partiel/
+    # informel extrait par l'agent d'une question en langage naturel ne
+    # matchait RIEN (comparaison exacte contre les 77 vrais noms d'agence,
+    # souvent "Ville N") et renvoyait silencieusement un resultat a zero
+    # au lieu d'une erreur ou d'un vrai match.
+    if agence  and agence  != "all" and "AGENCE"  in df.columns: df = df[df["AGENCE"]  == normalize_agence(agence)]
     if region  and region  != "all" and "Region"  in df.columns: df = df[df["Region"]  == region]
     if branche and branche != "all" and "BRANCHE" in df.columns: df = df[df["BRANCHE"] == branche]
     if mois    and mois    != 0     and "MOIS"    in df.columns: df = df[df["MOIS"]    == mois]
@@ -618,18 +983,28 @@ def is_unfiltered(agence=None, region=None, branche=None, mois=None):
 
 
 def tool_portfolio_summary(agence=None, region=None, branche=None):
-    prod, sin = get_df()
+    prod, _ = get_df()
     prod_f = apply_filters(prod, agence, region, branche)
 
     if is_unfiltered(agence, region, branche):
         ca = round(state.get("ca_total_reel", 0.0), 2)
         nb_contrats = state.get("nb_contrats_reel", TOTAL_CONTRATS_REEL)
+        st = round(state.get("sin_total_reel", 0.0), 2)
     else:
         ca_sample = prod_f["PRIME_NETTE"].sum() if "PRIME_NETTE" in prod_f.columns else 0
         ca = scale_ca(ca_sample, len(prod_f))
         nb_contrats = len(prod_f)
+        # Sinistres filtres calcules sur le portefeuille COMPLET (sin_full_df),
+        # pas l'echantillon temps reel (3k/12k) utilise ailleurs pour le flux
+        # simule -- une agence/branche filtree sur un si petit echantillon
+        # donnerait un total quasi nul la plupart du temps. sin_full_df n'a
+        # pas Region/BRANCHE : apply_filters ignore silencieusement ces deux
+        # filtres sur ce dataframe (colonnes absentes), region/branche restent
+        # donc approximatifs pour ce total precis (agence reste exact).
+        _, sin_full = get_full_df()
+        sin_f_full = apply_filters(sin_full, agence, region, branche)
+        st = round(sin_f_full["REGLEMENTS"].sum(), 2) if "REGLEMENTS" in sin_f_full.columns else 0
 
-    st     = sin["REGLEMENTS"].sum() if "REGLEMENTS" in sin.columns else 0
     top_ag = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().idxmax() if len(prod_f) > 0 else "N/A"
     return {
         "ca_total":           ca,
@@ -661,28 +1036,40 @@ def tool_top_agencies(n=5, agence=None, region=None, branche=None):
             for a, v in top.items()]
 
 
-# Facteurs saisonniers derives du modele de regression saisonniere de
-# 04_forecasting.py (1 harmonique -- voir model_comparison.ipynb, section
-# tuning Optuna : la config a 2 harmoniques utilisee avant surapprenait le
-# bruit propre a 2025 sur seulement 12 points d'entrainement, verifie en
-# validation croisee leave-one-out). Extraits en detrendant le fit du
-# modele (coefficients sin/cos) sur processed_data/Production_Cleaned.csv,
-# puis normalises pour que leur moyenne annuelle soit exactement 1 -- a
-# regenerer si 04_forecasting.py est ré-entraine sur de nouvelles donnees.
-_SEASONAL_RAW = [1.0073,0.9833,0.9637,0.9539,0.9564,0.9706,0.9927,1.0167,1.0363,1.0461,1.0436,1.0294]
-_seasonal_avg = sum(_SEASONAL_RAW) / 12
-SEASONAL_NORM = [s / _seasonal_avg for s in _SEASONAL_RAW]
+# Facteurs saisonniers derives du modele Prophet de 04_forecasting.py
+# (remarque 2, superviseur : compare empiriquement a 7 alternatives dans
+# model_comparison.ipynb, dans une comparaison unifiee intra-echantillon +
+# LOOCV + backtest glissant hors-echantillon -- Prophet generalise mieux
+# que tous les autres modeles testes sur les trois mesures -- remplace la
+# regression lineaire saisonniere utilisee avant).
+# Hyperparametres Prophet (changepoint_prior_scale=0.0244,
+# seasonality_prior_scale=0.599, fourier_order=1) tunes par Optuna + LOOCV
+# dans le notebook, pas choisis a la main.
+# Facteurs extraits en decomposant la prevision Prophet a 12 mois en
+# composante tendance + composante saisonniere (colonnes 'trend'/'monthly'
+# de model.predict()), rapportees a la tendance moyenne puis normalisees
+# pour que leur moyenne annuelle soit exactement 1 -- a regenerer si
+# 04_forecasting.py est ré-entraine sur de nouvelles donnees.
+SEASONAL_NORM = [1.0051, 0.9792, 1.0029, 0.9770, 1.0006, 0.9747, 0.9417, 1.0269, 1.0235, 1.0247, 1.0213, 1.0224]
+
+# Taux de croissance annuel derive du meme forecast Prophet (total prevu sur
+# les 12 prochains mois vs total reel des 12 derniers mois, cf. 04_forecasting.py)
+# -- plus un taux fixe suppose, comme l'etait le +4.7% initial dont l'origine
+# n'etait pas documentee. A regenerer avec SEASONAL_NORM si le modele est
+# ré-entraine sur de nouvelles donnees.
+FORECAST_GROWTH_RATE = 0.0340
 MOIS_NOMS_LONGS = ["Janvier","Fevrier","Mars","Avril","Mai","Juin",
                    "Juillet","Aout","Septembre","Octobre","Novembre","Decembre"]
 
 # ── Intervalle de confiance DYNAMIQUE (widens with forecast horizon) ──
-CI_BASE_PCT   = 0.05    # +-5% pour le mois le plus proche (janvier)
+CI_BASE_PCT   = 0.05    # +-5% pour le mois le plus proche
 CI_GROWTH_PCT = 0.003   # +0.3 point par mois d'horizon supplementaire
 
 def ci_width_for_month(i: int) -> float:
     """
-    Largeur de l'intervalle de confiance pour le mois d'indice i (0=Janvier,
-    11=Decembre). Convention assumee et documentee (voir notes projet) :
+    Largeur de l'intervalle de confiance pour le mois d'indice i (0=premier
+    mois prevu -- pas forcement Janvier, voir forecast_calendar --, 11=dernier
+    des 12 mois). Convention assumee et documentee (voir notes projet) :
     plus l'horizon de prevision est loin, plus l'incertitude est grande,
     donc l'intervalle s'elargit lineairement avec le mois plutot que de
     rester fixe a +-7% quel que soit l'horizon. A affiner avec un vrai
@@ -692,99 +1079,164 @@ def ci_width_for_month(i: int) -> float:
     return CI_BASE_PCT + CI_GROWTH_PCT * i
 
 
+def forecast_calendar(periods: int = 12, today=None):
+    """
+    Les 12 (mois calendaire, annee) qui composent la fenetre de prevision,
+    en commencant au mois PROCHAIN reel (pas Janvier fixe) -- corrige un bug
+    ou la prevision affichait toujours "Janvier -> Decembre" quelle que soit
+    la date reelle d'execution, alors que les donnees d'entrainement sont
+    deja decalees dynamiquement (voir 02_cleaning.py, compute_dynamic_date_shift).
+    Ex : execute en aout 2026 -> Septembre 2026 .. Aout 2027.
+    """
+    if today is None:
+        today = datetime.now()
+    start_month = today.month + 1
+    start_year  = today.year
+    if start_month > 12:
+        start_month = 1
+        start_year += 1
+
+    out = []
+    for i in range(periods):
+        m = ((start_month - 1 + i) % 12) + 1
+        y = start_year + (start_month - 1 + i) // 12
+        out.append({"i": i, "mois_num": m, "annee": y,
+                    "mois": f"{MOIS_NOMS_LONGS[m - 1]} {y}"})
+    return out
+
+
 def tool_forecast(mois_num=None):
-    base   = state.get("ca_total_reel", 1_630_000_000) or 1_630_000_000
-    growth = 0.047
-    total_2026 = base * (1 + growth)
-    monthly = [total_2026 / 12 * SEASONAL_NORM[i] for i in range(12)]
+    base     = state.get("ca_total_reel", 1_630_000_000) or 1_630_000_000
+    growth   = FORECAST_GROWTH_RATE
+    total_12 = base * (1 + growth)
+    calendar = forecast_calendar()
+    monthly  = [total_12 / 12 * SEASONAL_NORM[c["mois_num"] - 1] for c in calendar]
 
     if mois_num and 1 <= mois_num <= 12:
-        i  = mois_num - 1
-        ca = monthly[i]
-        w  = ci_width_for_month(i)
-        return {"mois": MOIS_NOMS_LONGS[i], "ca_prev": round(ca, 2),
+        c  = next(c for c in calendar if c["mois_num"] == mois_num)
+        ca = monthly[c["i"]]
+        w  = ci_width_for_month(c["i"])
+        return {"mois": c["mois"], "ca_prev": round(ca, 2),
                 "ci_low": round(ca * (1 - w), 2), "ci_high": round(ca * (1 + w), 2),
                 "ci_width_pct": round(w * 100, 1)}
 
+    pic = calendar[int(np.argmax(monthly))]
     return {
-        "total_2026":     round(sum(monthly), 2),
-        "croissance_pct": 4.7,
-        "mois_pic":       MOIS_NOMS_LONGS[int(np.argmax(monthly))],
-        "detail":         [{"mois": MOIS_NOMS_LONGS[i], "ca": round(monthly[i], 2),
-                             "ci_width_pct": round(ci_width_for_month(i) * 100, 1)} for i in range(12)],
+        "total_12_mois":  round(sum(monthly), 2),
+        "croissance_pct": round(growth * 100, 2),
+        "mois_pic":       pic["mois"],
+        "detail":         [{"mois": c["mois"], "ca": round(monthly[c["i"]], 2),
+                             "ci_width_pct": round(ci_width_for_month(c["i"]) * 100, 1)} for c in calendar],
     }
 
 
 def tool_explain_forecast(mois_num=None):
-    base   = state.get("ca_total_reel", 1_630_000_000) or 1_630_000_000
-    growth = 0.047
-    total_2026 = base * (1 + growth)
-    monthly = [total_2026 / 12 * SEASONAL_NORM[i] for i in range(12)]
+    base     = state.get("ca_total_reel", 1_630_000_000) or 1_630_000_000
+    growth   = FORECAST_GROWTH_RATE
+    total_12 = base * (1 + growth)
+    calendar = forecast_calendar()
+    monthly  = [total_12 / 12 * SEASONAL_NORM[c["mois_num"] - 1] for c in calendar]
 
     if mois_num and 1 <= mois_num <= 12:
-        i = mois_num - 1
+        c = next(c for c in calendar if c["mois_num"] == mois_num)
         base_mensuel      = base / 12
-        apres_croissance  = total_2026 / 12
-        apres_saisonnalite = monthly[i]
-        w = ci_width_for_month(i)
+        apres_croissance  = total_12 / 12
+        apres_saisonnalite = monthly[c["i"]]
+        facteur = SEASONAL_NORM[c["mois_num"] - 1]
+        w = ci_width_for_month(c["i"])
         return {
-            "mois": MOIS_NOMS_LONGS[i],
+            "mois": c["mois"],
             "ca_prevu": round(apres_saisonnalite, 2),
             "decomposition": {
-                "1_base_mensuelle_2025":        round(base_mensuel, 2),
-                "2_apres_croissance_4.7pct":     round(apres_croissance, 2),
-                "3_facteur_saisonnier":          round(SEASONAL_NORM[i], 3),
-                "4_apres_saisonnalite_final":    round(apres_saisonnalite, 2),
+                "1_base_mensuelle_actuelle":        round(base_mensuel, 2),
+                "2_apres_croissance":                round(apres_croissance, 2),
+                "3_facteur_saisonnier":              round(facteur, 3),
+                "4_apres_saisonnalite_final":        round(apres_saisonnalite, 2),
             },
             "explication": (
-                f"CA base 2025 reparti uniformement sur 12 mois = {round(base_mensuel, 2):,.2f} TND. "
-                f"Apres application de la croissance annuelle de +4.7% (mesuree sur l'evolution reelle "
-                f"du CA MAE en 2025) = {round(apres_croissance, 2):,.2f} TND. "
-                f"{MOIS_NOMS_LONGS[i]} a un facteur saisonnier de {SEASONAL_NORM[i]:.3f} "
-                f"({'au-dessus' if SEASONAL_NORM[i] > 1 else 'en-dessous'} de la moyenne annuelle), "
+                f"CA actuel reparti uniformement sur 12 mois = {round(base_mensuel, 2):,.2f} TND. "
+                f"Apres application de la croissance annuelle de +{growth*100:.1f}% (extrapolee par le "
+                f"modele Prophet sur l'historique reel, voir model_comparison.ipynb) = "
+                f"{round(apres_croissance, 2):,.2f} TND. "
+                f"{c['mois']} a un facteur saisonnier de {facteur:.3f} "
+                f"({'au-dessus' if facteur > 1 else 'en-dessous'} de la moyenne annuelle), "
                 f"d'ou la prevision finale de {round(apres_saisonnalite, 2):,.2f} TND, "
-                f"avec un intervalle de confiance de +-{round(w*100,1)}% (horizon mois {mois_num}/12, "
+                f"avec un intervalle de confiance de +-{round(w*100,1)}% (horizon mois {c['i']+1}/12, "
                 f"l'incertitude croit avec l'horizon de prevision)."
             ),
         }
 
     return {
-        "total_2026": round(sum(monthly), 2),
+        "total_12_mois": round(sum(monthly), 2),
         "decomposition": {
-            "1_base_2025_reelle":         round(base, 2),
-            "2_croissance_appliquee_pct": 4.7,
-            "3_montant_croissance_tnd":   round(total_2026 - base, 2),
-            "4_total_apres_croissance":   round(total_2026, 2),
+            "1_base_reelle_actuelle":     round(base, 2),
+            "2_croissance_appliquee_pct": round(growth * 100, 2),
+            "3_montant_croissance_tnd":   round(total_12 - base, 2),
+            "4_total_apres_croissance":   round(total_12, 2),
         },
         "explication": (
-            f"Le CA reel 2025 (mesure sur la totalite du fichier, pas un echantillon) est de "
-            f"{round(base, 2):,.2f} TND. La croissance de +4.7% (observee reellement sur "
-            f"l'evolution du CA MAE en 2025) ajoute {round(total_2026 - base, 2):,.2f} TND, "
-            f"pour un total previsionnel 2026 de {round(total_2026, 2):,.2f} TND. Ce total est "
-            f"ensuite reparti sur les 12 mois selon un facteur saisonnier normalise (moyenne == 1). "
-            f"L'intervalle de confiance n'est plus fixe a +-7% : il part de +-{CI_BASE_PCT*100:.0f}% en "
-            f"debut d'annee et s'elargit de +{CI_GROWTH_PCT*100:.1f} point par mois d'horizon, jusqu'a "
-            f"+-{ci_width_for_month(11)*100:.1f}% en decembre, pour refleter l'incertitude croissante."
+            f"Le CA reel actuel (mesure sur la totalite du fichier, pas un echantillon) est de "
+            f"{round(base, 2):,.2f} TND. La croissance de +{growth*100:.1f}% (extrapolee par le modele "
+            f"Prophet sur l'evolution reelle du CA MAE, voir model_comparison.ipynb) ajoute "
+            f"{round(total_12 - base, 2):,.2f} TND, "
+            f"pour un total previsionnel sur 12 mois ({calendar[0]['mois']} a {calendar[-1]['mois']}) de "
+            f"{round(total_12, 2):,.2f} TND. Ce total est ensuite reparti sur les 12 mois selon un "
+            f"facteur saisonnier normalise (moyenne == 1). "
+            f"L'intervalle de confiance n'est plus fixe a +-7% : il part de +-{CI_BASE_PCT*100:.0f}% pour "
+            f"le premier mois prevu et s'elargit de +{CI_GROWTH_PCT*100:.1f} point par mois d'horizon, "
+            f"jusqu'a +-{ci_width_for_month(11)*100:.1f}% pour le 12e mois, pour refleter l'incertitude croissante."
         ),
         "mois_saisonniers": [
-            {"mois": MOIS_NOMS_LONGS[i], "facteur": round(SEASONAL_NORM[i], 3),
-             "ci_width_pct": round(ci_width_for_month(i) * 100, 1)}
-            for i in range(12)
+            {"mois": c["mois"], "facteur": round(SEASONAL_NORM[c["mois_num"] - 1], 3),
+             "ci_width_pct": round(ci_width_for_month(c["i"]) * 100, 1)}
+            for c in calendar
         ],
     }
 
 
+def tool_accidents_forecast():
+    """
+    Prevision du NOMBRE d accidents/mois sur les 12 prochains mois (Poisson
+    GLM, voir 08_accidents_forecasting.py) -- un COMPTE d evenements, PAS un
+    montant en TND. A utiliser quand l utilisateur demande combien
+    d accidents/sinistres sont attendus dans le futur (pour le cout
+    previsionnel en TND, utiliser forecast).
+    """
+    detail = load_accidents_forecast()
+    if not detail:
+        return {"error": "Previsions accidents indisponibles (executer 08_accidents_forecasting.py)."}
+    pic = max(detail, key=lambda d: d["accidents"])
+    return {
+        "total_12_mois_accidents": sum(d["accidents"] for d in detail),
+        "mois_pic":                pic["mois"],
+        "accidents_mois_pic":      pic["accidents"],
+        "detail":                  detail,
+    }
+
+
+# Fallback UNIQUEMENT si 05_clustering.py n'a jamais ete execute (pas de
+# outputs/segments_clients.csv) -- valeurs approximatives d'un run passe,
+# pas la source de verite. load_segments() (voir seed_data) est prioritaire.
+# Meme schema que load_segments() pour que tool_segments() et /api/segments
+# (qui partagent maintenant cette meme liste) n'aient pas besoin d'un
+# fallback separe chacun.
+_SEGMENTS_FALLBACK = [
+    {"segment":"Premium",    "nb_clients":7751,  "ca_moyen":729000, "bm_moyen":2.1,
+     "nb_contrats_moyen":12.3, "ratio_sp_pct":45.0, "risque":"Faible", "color":SEGMENT_COLORS[0],
+     "description":"12+ contrats, BM<=3, tres fideles"},
+    {"segment":"Standard",   "nb_clients":11771, "ca_moyen":368000, "bm_moyen":7.0,
+     "nb_contrats_moyen":5.8,  "ratio_sp_pct":62.0, "risque":"Modere", "color":SEGMENT_COLORS[1],
+     "description":"Primes elevees, BM=7, potentiel upgrade"},
+    {"segment":"Occasionnel","nb_clients":19333, "ca_moyen":190000, "bm_moyen":5.2,
+     "nb_contrats_moyen":2.4,  "ratio_sp_pct":62.0, "risque":"Modere", "color":SEGMENT_COLORS[2],
+     "description":"2-3 contrats, potentiel fidelisation"},
+    {"segment":"A Risque",   "nb_clients":33819, "ca_moyen":172000, "bm_moyen":10.8,
+     "nb_contrats_moyen":1.9,  "ratio_sp_pct":80.0, "risque":"Eleve", "color":SEGMENT_COLORS[3],
+     "description":"Fort BM, sinistralite elevee -- priorite"},
+]
+
 def tool_segments():
-    return [
-        {"segment":"Premium",    "nb_clients":7751,  "ca_moyen":729000, "risque":"Faible",
-         "description":"12+ contrats, BM<=3, tres fideles"},
-        {"segment":"Standard",   "nb_clients":11771, "ca_moyen":368000, "risque":"Modere",
-         "description":"Primes elevees, BM=7, potentiel upgrade"},
-        {"segment":"Occasionnel","nb_clients":19333, "ca_moyen":190000, "risque":"Modere",
-         "description":"2-3 contrats, potentiel fidelisation"},
-        {"segment":"A Risque",   "nb_clients":33819, "ca_moyen":172000, "risque":"Eleve",
-         "description":"Fort BM, sinistralite elevee -- priorite"},
-    ]
+    return state.get("segments_summary") or _SEGMENTS_FALLBACK
 
 
 def tool_risk_analysis(agence=None, region=None, branche=None):
@@ -886,8 +1338,19 @@ def tool_risk_clients(n=20, agence=None, region=None, branche=None):
         for n_client, row in a_risque.head(max(1, n)).iterrows()
     ]
 
+    # Agrege par agence sur la totalite de a_risque (pas seulement les n
+    # affiches) -- pour un affichage tableau de bord (comptage/graphe), pas
+    # une liste nominative : remarque superviseur, la Direction Generale n'a
+    # pas besoin de voir chaque client un par un, seulement des stats/graphes.
+    par_agence = []
+    if len(a_risque) > 0 and "N_CLIENT" in prod_f.columns:
+        agences_a_risque = agence_par_client.reindex(a_risque.index)
+        counts = agences_a_risque.value_counts()
+        par_agence = [{"agence": str(ag), "nb_clients_risque": int(c)} for ag, c in counts.head(10).items()]
+
     return {
         "clients":                clients,
+        "par_agence":             par_agence,
         "total_clients_a_risque": int(len(a_risque)),
         "nb_clients_analyses":    int(len(ratio_df)),
         "seuil_ratio_sp_pct":     RISK_RATIO_THRESHOLD_PCT,
@@ -902,7 +1365,13 @@ def tool_risk_clients(n=20, agence=None, region=None, branche=None):
 
 
 def tool_sinistres_stats():
-    _, sin = get_df()
+    # Portefeuille COMPLET (get_full_df), pas l'echantillon live get_df() --
+    # ce dernier se fait polluer au fil du temps par le simulateur, qui pioche
+    # ses agences/sinistres synthetiques dans une liste plus large que les 10
+    # agences reelles (voir tool_compare_agencies) ; sur cette page d'analyse
+    # "reelle", ca fausserait aussi bien la moyenne par sinistre que le pic
+    # mensuel.
+    _, sin = get_full_df()
     return {
         "total_sinistres": len(sin),
         "montant_total":   round(state.get("sin_total_reel", 0.0), 2),
@@ -921,26 +1390,45 @@ def tool_branch_analysis():
 
 
 def tool_compare_agencies():
-    prod, sin = get_df()
+    # Portefeuille COMPLET (get_full_df), pas l'echantillon live get_df() :
+    # le simulateur pioche ses contrats/sinistres synthetiques dans une liste
+    # d'agences plus large (tous les gouvernorats) que les 10 agences REELES
+    # du portefeuille historique -- sur l'echantillon live, une agence
+    # synthetique a tres faible volume peut recevoir par hasard un sinistre
+    # simule sans denominateur (CA) correspondant, produisant un ratio S/P
+    # de plusieurs milliers de % qui n'existe pas dans les vraies donnees
+    # (verifie : "Gafsa"/"Tozeur" n'apparaissent dans AUCUN des deux fichiers
+    # Cleaned.csv reels -- seulement 10 agences y existent).
+    prod, sin = get_full_df()
     result = []
     for ag in prod["AGENCE"].unique():
         p  = prod[prod["AGENCE"] == ag]
         s  = sin[sin["AGENCE"]  == ag] if "AGENCE" in sin.columns else pd.DataFrame()
         ca = p["PRIME_NETTE"].sum()
         st = s["REGLEMENTS"].sum() if len(s) > 0 and "REGLEMENTS" in s.columns else 0
+        # ratio_sp_pct=0 si l'agence est sous le plancher d'exposition (voir
+        # MIN_CONTRATS_FOR_AGENCE_RATIO) -- evite qu'une micro-agence a
+        # denominateur quasi nul affiche un ratio a plusieurs milliers de %
+        # qui ecrase l'echelle du graphique pour toutes les autres.
+        assez_de_donnees = len(p) >= MIN_CONTRATS_FOR_AGENCE_RATIO
         result.append({
             "agence":       str(ag),
             "ca":           round(ca, 2),
             "nb_contrats":  len(p),
             "prime_moy":    round(p["PRIME_NETTE"].mean(), 2) if len(p) > 0 else 0,
             "sinistres":    round(st, 2),
-            "ratio_sp_pct": round(st / ca * 100, 2) if ca > 0 else 0,
+            "ratio_sp_pct": round(st / ca * 100, 2) if (ca > 0 and assez_de_donnees) else 0,
         })
     return sorted(result, key=lambda x: x["ca"], reverse=True)
 
 
 def tool_detect_anomalies():
-    prod, sin = get_df()
+    # Portefeuille COMPLET (get_full_df), pas l'echantillon live get_df() --
+    # meme raison que tool_compare_agencies()/tool_risk_clients() : sur
+    # l'echantillon live (10k/3k lignes), le bruit d'echantillonnage + les
+    # denominateurs quasi nuls produisaient des ratios moyens a 5 chiffres
+    # (ex. 11 634% observe) sans rapport avec le portefeuille reel.
+    prod, sin = get_full_df()
     anomalies = []
     if "REGLEMENTS" in sin.columns and len(sin) > 10:
         mean_s   = sin["REGLEMENTS"].mean()
@@ -956,6 +1444,11 @@ def tool_detect_anomalies():
         ca_cl    = prod.groupby("N_CLIENT")["PRIME_NETTE"].sum()
         st_cl    = sin.groupby("N_CLIENT")["REGLEMENTS"].sum()
         ratio_df = pd.DataFrame({"CA": ca_cl, "ST": st_cl}).dropna()
+        # Meme plancher que tool_risk_clients() (MIN_CA_FOR_RISK_TND) --
+        # sans lui, ce comptage-ci restait sur un ratio moyen a 5 chiffres
+        # (denominateurs quasi nuls) alors que le tableau nominatif juste en
+        # dessous, lui, l'appliquait deja -- incoherence visible sur la meme page.
+        ratio_df = ratio_df[ratio_df["CA"] >= MIN_CA_FOR_RISK_TND]
         ratio_df["ratio"] = ratio_df["ST"] / ratio_df["CA"] * 100
         haut     = ratio_df[ratio_df["ratio"] > RISK_RATIO_THRESHOLD_PCT]
         anomalies.append({
@@ -1198,10 +1691,14 @@ def _generate_pdf_report(agence, region, branche, mois_num, sections):
                 f"(intervalle +-{fc['ci_width_pct']}%).", body_style))
         else:
             story.append(Paragraph(
-                f"CA total prevu 2026 : <b>{_fmt_tnd_fr(fc['total_2026'])}</b> "
-                f"(croissance de {fc['croissance_pct']}% vs 2025). Mois de pic saisonnier : {fc['mois_pic']}. "
-                f"Intervalles de confiance dynamiques : de +-{fc['detail'][0]['ci_width_pct']}% en debut d'annee "
-                f"a +-{fc['detail'][-1]['ci_width_pct']}% en fin d'annee (incertitude croissante avec l'horizon).",
+                f"CA total prevu sur les 12 prochains mois "
+                f"({fc['detail'][0]['mois']} a {fc['detail'][-1]['mois']}) : "
+                f"<b>{_fmt_tnd_fr(fc['total_12_mois'])}</b> "
+                f"(croissance de {fc['croissance_pct']}% vs les 12 mois precedents). "
+                f"Mois de pic saisonnier : {fc['mois_pic']}. "
+                f"Intervalles de confiance dynamiques : de +-{fc['detail'][0]['ci_width_pct']}% pour le "
+                f"premier mois prevu a +-{fc['detail'][-1]['ci_width_pct']}% pour le dernier "
+                f"(incertitude croissante avec l'horizon).",
                 body_style
             ))
             fc_rows = [["Mois", "CA prevu", "Intervalle"]] + [
@@ -1334,6 +1831,7 @@ TOOLS_MAP = {
     "top_agencies":       tool_top_agencies,
     "forecast":           tool_forecast,
     "explain_forecast":   tool_explain_forecast,
+    "accidents_forecast": tool_accidents_forecast,
     "segments":           tool_segments,
     "risk_analysis":      tool_risk_analysis,
     "risk_clients":       tool_risk_clients,
@@ -1369,19 +1867,25 @@ def status():
 
 @app.get("/api/kpis")
 def kpis(agence: str = "all", region: str = "all", branche: str = "all", mois: int = 0):
-    prod, sin = get_df()
+    prod, _ = get_df()
     prod_f = apply_filters(prod, agence, region, branche, mois)
-    sin_f  = apply_filters(sin,  agence, None,   None,    mois)
 
     if is_unfiltered(agence, region, branche, mois):
         ca = round(state.get("ca_total_reel", 0.0), 2)
         nb = state.get("nb_contrats_reel", TOTAL_CONTRATS_REEL)
+        st = round(state.get("sin_total_reel", 0.0), 2)
     else:
         ca_sample = prod_f["PRIME_NETTE"].sum() if "PRIME_NETTE" in prod_f.columns else 0
         ca = scale_ca(ca_sample, len(prod_f))
         nb = len(prod_f)
+        # Portefeuille COMPLET (sin_full_df), pas l'echantillon 3k/12k --
+        # voir tool_portfolio_summary pour la meme logique. sin_full_df n'a
+        # ni Region/BRANCHE ni MOIS : ces filtres restent approximatifs pour
+        # ce total precis (agence reste exact).
+        _, sin_full = get_full_df()
+        sin_f_full = apply_filters(sin_full, agence, region, branche)
+        st = round(sin_f_full["REGLEMENTS"].sum(), 2) if "REGLEMENTS" in sin_f_full.columns else 0
 
-    st     = sin_f["REGLEMENTS"].sum() if "REGLEMENTS" in sin_f.columns else 0
     top_ag = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().idxmax() if len(prod_f) > 0 else "N/A"
     top_ca = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().max()    if len(prod_f) > 0 else 0
     return {
@@ -1420,20 +1924,28 @@ def ca_by_branche(agence: str = "all", region: str = "all", mois: int = 0):
 
 @app.get("/api/ca-by-month")
 def ca_by_month(agence: str = "all", region: str = "all", branche: str = "all"):
-    prod, sin = get_df()
-    prod    = apply_filters(prod, agence, region, branche)
-    prime_m = prod.groupby("MOIS")["PRIME_NETTE"].sum() if "MOIS" in prod.columns else pd.Series()
-    sin_m   = sin.groupby("MOIS")["REGLEMENTS"].sum()   if "MOIS" in sin.columns  else pd.Series()
+    prod, _ = get_df()
+    prod = apply_filters(prod, agence, region, branche)
 
     if is_unfiltered(agence, region, branche):
-        by_month_reel = state.get("ca_by_month_reel", {})
-        total_reel    = state.get("ca_total_reel", 0.0)
+        by_month_reel  = state.get("ca_by_month_reel", {})
+        total_reel     = state.get("ca_total_reel", 0.0)
+        sin_by_month   = state.get("sin_by_month_reel", {})
         return [{"mois": MOIS_LABELS[m-1], "mois_num": m,
                  "primes":    round(float(by_month_reel.get(m, total_reel/12)), 2),
-                 "sinistres": round(float(sin_m.get(m, 0)), 2)}
+                 "sinistres": round(float(sin_by_month.get(m, 0)), 2)}
                 for m in range(1, 13)]
 
+    # Sinistres filtres : portefeuille COMPLET (sin_full_df, inclut MOIS
+    # depuis seed_data), pas l'echantillon 3k -- meme principe que
+    # tool_portfolio_summary/api/kpis. Region/BRANCHE non disponibles sur
+    # sin_full_df, ignores silencieusement par apply_filters pour ce total.
+    _, sin_full = get_full_df()
+    sin_full_f  = apply_filters(sin_full, agence, region, branche)
+    sin_m = sin_full_f.groupby("MOIS")["REGLEMENTS"].sum() if "MOIS" in sin_full_f.columns else pd.Series()
+
     sf = TOTAL_CONTRATS_REEL / max(len(prod), 1)
+    prime_m = prod.groupby("MOIS")["PRIME_NETTE"].sum() if "MOIS" in prod.columns else pd.Series()
     return [{"mois": MOIS_LABELS[m-1], "mois_num": m,
              "primes":    round(float(prime_m.get(m, 0)) * sf, 2),
              "sinistres": round(float(sin_m.get(m, 0)), 2)}
@@ -1451,27 +1963,30 @@ def profil_clients_endpoint(agence: str = "all", region: str = "all", branche: s
 
 @app.get("/api/forecast")
 def forecast_endpoint():
-    base   = state.get("ca_total_reel", 1_630_000_000) or 1_630_000_000
-    growth = 0.047
-    total_2026 = base * (1 + growth)
-    monthly = [total_2026 / 12 * SEASONAL_NORM[i] for i in range(12)]
+    base     = state.get("ca_total_reel", 1_630_000_000) or 1_630_000_000
+    growth   = FORECAST_GROWTH_RATE
+    total_12 = base * (1 + growth)
+    calendar = forecast_calendar()
+    monthly  = [total_12 / 12 * SEASONAL_NORM[c["mois_num"] - 1] for c in calendar]
 
     by_month_reel = state.get("ca_by_month_reel", {})
     if by_month_reel:
-        ca_reel_2025 = [round(float(by_month_reel.get(m, base / 12)), 2) for m in range(1, 13)]
+        ca_reel_actuel = {m: round(float(by_month_reel.get(m, base / 12)), 2) for m in range(1, 13)}
     else:
-        ca_reel_2025 = [round(base / 12, 2)] * 12
+        ca_reel_actuel = {m: round(base / 12, 2) for m in range(1, 13)}
 
     result = []
-    for i in range(12):
-        w = ci_width_for_month(i)
+    for c in calendar:
+        w = ci_width_for_month(c["i"])
+        ca = monthly[c["i"]]
         result.append({
-            "mois":     MOIS_LABELS[i],
-            "mois_num": i + 1,
-            "ca_prev":  round(monthly[i], 2),
-            "ci_low":   round(monthly[i] * (1 - w), 2),
-            "ci_high":  round(monthly[i] * (1 + w), 2),
-            "ca_reel":  ca_reel_2025[i],
+            "mois":     MOIS_LABELS[c["mois_num"] - 1],
+            "mois_num": c["mois_num"],
+            "annee":    c["annee"],
+            "ca_prev":  round(ca, 2),
+            "ci_low":   round(ca * (1 - w), 2),
+            "ci_high":  round(ca * (1 + w), 2),
+            "ca_reel":  ca_reel_actuel[c["mois_num"]],
         })
     return result
 
@@ -1479,6 +1994,11 @@ def forecast_endpoint():
 @app.get("/api/explain-forecast")
 def explain_forecast_endpoint(mois_num: int = 0):
     return tool_explain_forecast(mois_num if mois_num else None)
+
+
+@app.get("/api/accidents-forecast")
+def accidents_forecast_endpoint():
+    return load_accidents_forecast()
 
 
 @app.get("/api/monitoring")
@@ -1501,16 +2021,9 @@ def generate_report_endpoint(format: str = "pdf"):
 
 @app.get("/api/segments")
 def segments_endpoint():
-    return [
-        {"segment":"Premium",    "count":7751,  "ca_moyen":729000, "color":"#00e5b4",
-         "bm_moyen":2.1, "nb_contrats_moyen":12.3, "risque":"Faible"},
-        {"segment":"Standard",   "count":11771, "ca_moyen":368000, "color":"#3b82f6",
-         "bm_moyen":7.0, "nb_contrats_moyen":5.8,  "risque":"Modere"},
-        {"segment":"Occasionnel","count":19333, "ca_moyen":190000, "color":"#f59e0b",
-         "bm_moyen":5.2, "nb_contrats_moyen":2.4,  "risque":"Modere"},
-        {"segment":"A Risque",   "count":33819, "ca_moyen":172000, "color":"#f43f5e",
-         "bm_moyen":10.8,"nb_contrats_moyen":1.9,  "risque":"Eleve"},
-    ]
+    # Meme source que tool_segments() (agent) -- voir load_segments(). Seul
+    # "nb_clients" est renomme "count" ici, cle attendue par le dashboard.
+    return [{**s, "count": s["nb_clients"]} for s in tool_segments()]
 
 
 @app.get("/api/filters")
@@ -1576,6 +2089,11 @@ def compare_agencies_endpoint():
     return tool_compare_agencies()
 
 
+@app.get("/api/sinistres-stats")
+def sinistres_stats_endpoint():
+    return tool_sinistres_stats()
+
+
 class ChatRequest(BaseModel):
     message: str
     history: list = []
@@ -1587,13 +2105,28 @@ _REPORT_MEDIA_TYPES = {
 
 
 @app.get("/api/reports/{filename}")
-def download_report(filename: str):
+def download_report(filename: str, inline: bool = False):
+    """
+    inline=False (defaut) : Content-Disposition: attachment -- comportement
+    d'origine, force le telechargement (bouton "Telecharger" cote frontend).
+    inline=True : Content-Disposition: inline -- le navigateur affiche le
+    PDF directement dans un nouvel onglet au lieu de forcer un
+    enregistrement sur disque (bouton "Visualiser" cote frontend --
+    remarque superviseur : la liste des rapports generes par l'agent
+    n'offrait qu'un lien a copier ou un telechargement automatique dans le
+    dossier reports/, pas d'apercu direct).
+    """
     # Securite : empeche toute tentative de path traversal (../../etc)
     safe_name = os.path.basename(filename)
     filepath = os.path.join(REPORTS_DIR, safe_name)
     ext = os.path.splitext(safe_name)[1].lower()
     if not os.path.isfile(filepath) or ext not in _REPORT_MEDIA_TYPES:
         raise HTTPException(status_code=404, detail="Rapport introuvable.")
+    if inline:
+        return FileResponse(
+            path=filepath, media_type=_REPORT_MEDIA_TYPES[ext],
+            headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+        )
     return FileResponse(path=filepath, media_type=_REPORT_MEDIA_TYPES[ext], filename=safe_name)
 
 
@@ -1601,15 +2134,9 @@ def download_report(filename: str):
 def agent_endpoint(req: ChatRequest):
     global _agent
     if _agent is None:
-        api_key = os.environ.get("GROQ_API_KEY", "")
-        if not api_key:
-            return {
-                "answer": "GROQ_API_KEY non configuree. Creez un compte gratuit sur console.groq.com et ajoutez la cle dans .env",
-                "tool_calls": [], "thinking": [], "tokens_used": 0, "duration_ms": 0,
-            }
         try:
             _agent = MAEAgent(tools_map=TOOLS_MAP)
-        except ValueError as e:
+        except Exception as e:
             return {"answer": str(e), "tool_calls": [], "thinking": [], "tokens_used": 0, "duration_ms": 0}
 
     return _agent.run(req.message, req.history)
