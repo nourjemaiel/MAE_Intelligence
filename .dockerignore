@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.ipynb_checkpoints/
+mlruns/
+mlflow.db
+plots/
+raw_data/
+mae_backend/.env
+mae_backend/logs/
+mae_backend/chroma_db/
+mae_backend/reports/
+mae_backend/eval_results/
+mae_backend/mlruns/
+mae_backend/live_delta_contrats.jsonl
+mae_backend/live_delta_sinistres.jsonl
