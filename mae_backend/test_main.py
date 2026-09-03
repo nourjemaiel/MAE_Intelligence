@@ -159,14 +159,19 @@ def test_risk_clients_labels_exceptional_claims_separately():
 
 
 def test_risk_clients_respects_agence_filter():
+    # AGENCE stocke le nom deja normalise ("Sousse 3", pas "Sousse") --
+    # exactement comme dans le vrai portefeuille (voir seed_data()) --
+    # tandis que le filtre passe le nom informel tel qu'un utilisateur/agent
+    # l'ecrirait, pour verifier tout le pipeline normalize_agence() +
+    # apply_filters() ensemble, pas seulement une comparaison exacte.
     _set_full_portfolio(
         prod_rows=[
             {"N_CLIENT": "6", "AGENCE": "Sfax Ville", "PRIME_NETTE": 1000.0},
-            {"N_CLIENT": "7", "AGENCE": "Sousse",     "PRIME_NETTE": 1000.0},
+            {"N_CLIENT": "7", "AGENCE": "Sousse 3",   "PRIME_NETTE": 1000.0},
         ],
         sin_rows=[
             {"N_CLIENT": "6", "AGENCE": "Sfax Ville", "REGLEMENTS": 2000.0},
-            {"N_CLIENT": "7", "AGENCE": "Sousse",     "REGLEMENTS": 2000.0},
+            {"N_CLIENT": "7", "AGENCE": "Sousse 3",   "REGLEMENTS": 2000.0},
         ],
     )
     result = main.tool_risk_clients(n=10, agence="Sousse")

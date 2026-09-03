@@ -852,6 +852,16 @@ TOOL_DEFS = [
 # Deliberement conservateur : si rien ne matche, on ne devine pas -- on
 # retourne None et l appelant renvoie l erreur classique.
 DEGRADED_MODE_ROUTES = [
+    # v2.7 -- ajoutee en priorite absolue (grille d evaluation, voir
+    # eval_agent.py) : une demande de rapport contient tres souvent aussi
+    # "portefeuille" ou "prevision" (ex: "rapport PDF complet du
+    # portefeuille", "export Excel avec juste les previsions"), qui
+    # matchaient a tort les routes forecast/portfolio_summary plus bas des
+    # que le mode degrade s activait -- l utilisateur recevait des chiffres
+    # a la place du rapport demande. generate_report n a aucun parametre
+    # obligatoire (les filtres agence/branche/sections sont tous optionnels),
+    # donc route ici comme les autres.
+    (("rapport", "pdf", "export excel", "excel avec"),                     "generate_report"),
     (("prevision", "prévision", "2026", "croissance"),                    "forecast"),
     (("sinistre", "sinistres"),                                           "sinistres_stats"),
     (("anomalie", "anomalies", "aberrant"),                               "detect_anomalies"),
@@ -875,7 +885,17 @@ DEGRADED_MODE_ROUTES = [
 # le routeur ci-dessus, reserve aux outils sans parametre obligatoire) :
 # route separee qui reutilise directement la question de l utilisateur
 # comme requete de recherche semantique.
-DEGRADED_MODE_RAG_KEYWORDS = ("garantie", "garanties", "sayartek", "déclaration", "declaration")
+DEGRADED_MODE_RAG_KEYWORDS = (
+    "garantie", "garanties", "sayartek", "déclaration", "declaration",
+    # v2.7 -- liste elargie (grille d evaluation, voir eval_agent.py) : les
+    # 4 questions RAG du benchmark ("delai pour declarer", "systeme de
+    # bonus-malus", "grille tarifaire", "que dit le glossaire") ne
+    # matchaient AUCUN de ces mots-cles -> tombaient sur une route
+    # analytique non pertinente (ex: "sinistre" dans "declarer un
+    # sinistre" matchait sinistres_stats avant meme d atteindre ce filtre).
+    "delai", "délai", "declarer", "déclarer", "bonus-malus", "bonus malus",
+    "tarifaire", "tarif", "glossaire", "franchise", "procedure", "procédure",
+)
 
 
 # ════════════════════════════════════════════════════════════════
