@@ -597,9 +597,9 @@ TOOL_DEFS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "agence":  {"type": "string", "description": "Agence a filtrer (optionnel)"},
-                    "region":  {"type": "string", "description": "Region a filtrer (optionnel)"},
-                    "branche": {"type": "string", "description": "Branche a filtrer (optionnel)"},
+                    "agence":  {"type": ["string", "null"], "description": "Agence a filtrer (optionnel)"},
+                    "region":  {"type": ["string", "null"], "description": "Region a filtrer (optionnel)"},
+                    "branche": {"type": ["string", "null"], "description": "Branche a filtrer (optionnel)"},
                 },
                 "required": []
             }
@@ -614,9 +614,9 @@ TOOL_DEFS = [
                 "type": "object",
                 "properties": {
                     "n":       {"type": ["integer", "null"], "description": "Nombre d agences a retourner (defaut 5)"},
-                    "agence":  {"type": "string",  "description": "Filtrer sur une agence precise (optionnel)"},
-                    "region":  {"type": "string",  "description": "Filtrer sur une region precise (optionnel)"},
-                    "branche": {"type": "string",  "description": "Filtrer sur une branche precise (optionnel)"},
+                    "agence":  {"type": ["string", "null"], "description": "Filtrer sur une agence precise (optionnel)"},
+                    "region":  {"type": ["string", "null"], "description": "Filtrer sur une region precise (optionnel)"},
+                    "branche": {"type": ["string", "null"], "description": "Filtrer sur une branche precise (optionnel)"},
                 },
                 "required": []
             }
@@ -689,9 +689,9 @@ TOOL_DEFS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "agence":   {"type": "string",  "description": "Filtrer sur une agence precise (optionnel)"},
-                    "region":   {"type": "string",  "description": "Filtrer sur une region precise (optionnel)"},
-                    "branche":  {"type": "string",  "description": "Filtrer sur une branche precise (optionnel)"},
+                    "agence":   {"type": ["string", "null"], "description": "Filtrer sur une agence precise (optionnel)"},
+                    "region":   {"type": ["string", "null"], "description": "Filtrer sur une region precise (optionnel)"},
+                    "branche":  {"type": ["string", "null"], "description": "Filtrer sur une branche precise (optionnel)"},
                     "mois_num": {"type": ["integer", "null"], "description": "Restreindre les previsions a un mois 1-12 (optionnel)"},
                     "sections": {
                         "type": "array",
@@ -734,9 +734,9 @@ TOOL_DEFS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "agence":  {"type": "string", "description": "Filtrer sur une agence precise (optionnel)"},
-                    "region":  {"type": "string", "description": "Filtrer sur une region precise (optionnel)"},
-                    "branche": {"type": "string", "description": "Filtrer sur une branche precise (optionnel)"},
+                    "agence":  {"type": ["string", "null"], "description": "Filtrer sur une agence precise (optionnel)"},
+                    "region":  {"type": ["string", "null"], "description": "Filtrer sur une region precise (optionnel)"},
+                    "branche": {"type": ["string", "null"], "description": "Filtrer sur une branche precise (optionnel)"},
                 },
                 "required": []
             }
@@ -757,9 +757,9 @@ TOOL_DEFS = [
                 "type": "object",
                 "properties": {
                     "n":       {"type": ["integer", "null"], "description": "Nombre de clients a retourner (defaut 20)"},
-                    "agence":  {"type": "string",  "description": "Filtrer sur une agence precise (optionnel)"},
-                    "region":  {"type": "string",  "description": "Filtrer sur une region precise (optionnel)"},
-                    "branche": {"type": "string",  "description": "Filtrer sur une branche precise (optionnel)"},
+                    "agence":  {"type": ["string", "null"], "description": "Filtrer sur une agence precise (optionnel)"},
+                    "region":  {"type": ["string", "null"], "description": "Filtrer sur une region precise (optionnel)"},
+                    "branche": {"type": ["string", "null"], "description": "Filtrer sur une branche precise (optionnel)"},
                 },
                 "required": []
             }
