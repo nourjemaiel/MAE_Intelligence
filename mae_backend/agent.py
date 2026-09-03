@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 agent.py — MAEIA · Agent ReAct MAE Assurances
-Modele : Qwen2.5-3B-Instruct via Ollama, local, GPU (voir Changelog v2.5)
+Modele : qwen/qwen3.6-27b via Groq, cloud (voir Changelog v2.6)
 Architecture : Reasoning -> Tool Selection -> Execution -> Observation -> Reponse
 MLflow tracke chaque interaction
 
@@ -89,6 +89,66 @@ Changelog v2.5 (2026-08, modele local) :
   self.client pointe desormais vers l'API compatible OpenAI d'Ollama
   (OLLAMA_BASE_URL) au lieu du SDK Groq -- meme forme de reponse, aucun
   changement necessaire dans la boucle ReAct.
+
+Changelog v2.6 (2026-08-30, retour a Groq/openai-gpt-oss-20b) :
+- QWEN2.5-3B LOCAL ABANDONNE : la grille de test manuelle (18 questions,
+  16 outils) a montre un echec systematique de synthese sur 10/13
+  questions testees -- le modele appelle l'outil attendu UNE fois (bonne
+  donnee obtenue), puis rappelle le MEME outil au lieu de rediger une
+  reponse en francais, ce qui declenche le garde-fou anti-boucle et
+  renvoie les donnees brutes en liste plutot qu'une synthese. 2 questions
+  supplementaires (forecast/explain_forecast) montrent un echec different
+  mais lie : le modele suggere a L'UTILISATEUR d'appeler lui-meme la
+  fonction ("vous pouvez utiliser la fonction `explain_forecast`") au lieu
+  de l'appeler et de repondre. Un rappel dans le system prompt n'avait deja
+  pas suffi a corriger le comportement de boucle (voir v2.5) -- ce n'est
+  pas un probleme de prompt mais un plafond de capacite du modele 3B sur
+  cette tache de synthese, confirme empiriquement sur les vraies donnees
+  du portefeuille (pas une hypothese).
+- ESSAI qwen/qwen3.6-27b VIA GROQ (ABANDONNE) : deja identifie comme fiable
+  en selection d'outil dans le benchmark v2.5, et la synthese redigee etait
+  effectivement excellente (aucun nom d'outil expose, aucune boucle) --
+  mais ce modele est plafonne a 8000 TOKENS/MINUTE sur le tier gratuit
+  "on_demand" de ce compte Groq, alors que CE SEUL agent (system prompt +
+  16 schemas d'outils + historique + resultat d'outil) depasse deja 8000
+  tokens des la 2e requete d'un simple aller-retour ReAct (vu en prod :
+  "Requested 14934, Limit 8000") -- pas une histoire de patience/retry,
+  la requete est intrinsequement trop grosse pour CE tier, quel que soit
+  le delai d'attente.
+- RETOUR A openai/gpt-oss-20b VIA GROQ : seul autre modele du catalogue de
+  ce compte (avec openai/gpt-oss-120b, deja ecarte pour instabilite) a ne
+  PAS afficher ce plafond TPM explicite -- seulement du 429 (limite de
+  REQUETES/minute, resolu par l'attente/retry deja en place). Meme qualite
+  de synthese que qwen3.6-27b sur les tests rejoues (segments avec les 7
+  entrees, derive de donnees, salutation simple), latence comparable
+  (25-60s/appel). GROQ_API_KEY deja present dans .env (jamais retire lors
+  du passage a Ollama). self.client repointe vers l'API OpenAI-compatible
+  de Groq (GROQ_BASE_URL) ; extra_body={"options": {"repeat_penalty": ...}}
+  retire de _call_llm_with_retry (parametre specifique au serveur Ollama,
+  non reconnu par l'API Groq).
+- BUG CORRIGE (schema d'outil) : les parametres optionnels de type entier
+  (mois_num, n, n_runs) etaient declares "type": "integer" sans autoriser
+  null -- Groq valide strictement le schema cote serveur et rejette avec
+  une 400 des que le modele choisit d'envoyer explicitement null plutot
+  que d'omettre la cle (observe sur explain_forecast). Tous les types
+  passes a ["integer", "null"], et tout argument null est maintenant
+  filtre avant l'appel Python (sinon fn(n=None) ecraserait silencieusement
+  la valeur par defaut de l'outil, ex. top_agencies(n=None).head(None)
+  renverrait TOUTES les agences au lieu du Top N).
+- BUG CORRIGE (mode degrade incomplet) : "derive"/"monitoring" et les
+  questions sur les garanties/procedures (Sayartek...) ne correspondaient
+  a AUCUNE route de DEGRADED_MODE_ROUTES -- _error_response() renvoyait
+  alors le texte brut de l'exception Groq (429/413, avec l'ID d'organisation
+  et un lien de facturation) tel quel a l'utilisateur. Routes ajoutees +
+  message d'erreur generique et professionnel a la place du blob technique.
+- BUG CORRIGE (frontend) : mae_frontend/index.html remplacait toute reponse
+  contenant "429"/"rate_limit" par un message fige datant de l'epoque
+  Ollama ("modele local", "recharge en memoire") -- toujours trompeur
+  maintenant que le detail technique est deja assaini cote backend (voir
+  ci-dessus), et ce texte de remplacement etait en plus injecte dans
+  l'historique de conversation comme si l'agent l'avait reellement dit,
+  polluant les tours suivants. Supprime : la reponse du backend s'affiche
+  desormais telle quelle.
 """
 
 import inspect
@@ -121,28 +181,36 @@ mlflow.set_experiment("MAE_Agent_Interactions")
 # ════════════════════════════════════════════════════════════════
 MAX_LLM_RETRIES      = 2      # nombre de RE-essais apres le premier echec (donc 3 tentatives au total)
 LLM_RETRY_BASE_SEC   = 1.5    # backoff exponentiel : 1.5s, 3.0s, ...
-TOOL_RESULT_MAX_CHARS = 1800  # taille max (en caracteres JSON) d'un resultat d'outil injecte dans l'historique
+TOOL_RESULT_MAX_CHARS = 2200  # taille max (en caracteres JSON) d'un resultat d'outil injecte dans l'historique
+# v2.6 -- releve de 1800 a 2200 : le JSON complet de segments() (7 segments,
+# noms + description desormais plus longs comme "Client Jeune Conducteur")
+# fait 1912 caracteres, depassant l'ancienne limite malgre le commentaire de
+# _truncate_tool_result affirmant que segments n'est "jamais affecte" -- un
+# segment (Autres Clients) etait silencieusement omis a chaque appel.
 RAG_PERTINENCE_GAP_MAX = 0.03  # v2.5 -- ecart max de pertinence tolere vs le meilleur extrait RAG (voir consulter_documents_metier)
 REPORT_URL_RE = re.compile(r'https?://\S+/api/reports/\S+\.(?:pdf|xlsx)', re.IGNORECASE)
 
 # ════════════════════════════════════════════════════════════════
-# MODELE LOCAL (v2.5, 2026-08) — Ollama / Qwen2.5-3B-Instruct
+# MODELE (v2.6, 2026-08-30) — Groq / openai/gpt-oss-20b
 # ════════════════════════════════════════════════════════════════
-# Remplace Groq/Llama-3.3-70B (modele retire du catalogue Groq, cf.
-# benchmark du 2026-08-20) : execution 100% locale sur le GPU de la
-# machine (RTX 3050 6GB, offload GPU confirme via `ollama ps`), aucune
-# donnee ne quitte la machine -- repond a la demande securite/donnees du
-# superviseur. Benchmark sur les 15 outils reels de l'agent : 8/8 bons
-# choix d'outil, latence 3.5-18s, contre des alternatives cloud Groq soit
-# instables (openai/gpt-oss-120b : plante sur les parametres optionnels
-# non fournis, rate-limit a 8000 tokens/min) soit tres lentes
-# (qwen/qwen3.6-27b : "modele de raisonnement", 25-64s/appel).
-# Ollama expose une API compatible OpenAI (/v1) : le SDK `openai` standard
+# Le modele local (Ollama/Qwen2.5-3B, v2.5) a echoue de facon systematique
+# sur la grille de test manuelle : synthese finale jamais produite sur la
+# majorite des questions (rappel du meme outil en boucle -> garde-fou ->
+# donnees brutes renvoyees telles quelles), voir Changelog v2.6 ci-dessus.
+# qwen/qwen3.6-27b (deja identifie comme fiable en selection d'outil dans
+# le benchmark v2.5) a ete essaye en premier -- excellente synthese, mais
+# plafonne a 8000 tokens/minute sur le tier gratuit de ce compte Groq, une
+# limite que la taille du payload de CET agent (16 outils + historique)
+# depasse des le 2e aller-retour d'une meme question. openai/gpt-oss-20b
+# est le seul autre modele du catalogue sans ce plafond explicite --
+# meme qualite de synthese, latence comparable (25-60s/appel), seulement
+# du 429 (limite de requetes/minute, deja gere par le retry+backoff).
+# Groq expose une API compatible OpenAI (/v1) : le SDK `openai` standard
 # fonctionne sans aucun changement au reste de la boucle ReAct ci-dessous
-# (meme forme de reponse que le SDK Groq -- choices[0].message.tool_calls
-# avec arguments encodes en JSON string).
-OLLAMA_BASE_URL = "http://localhost:11434/v1"
-OLLAMA_MODEL    = "qwen2.5:3b-instruct"
+# (meme forme de reponse -- choices[0].message.tool_calls avec arguments
+# encodes en JSON string).
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_MODEL    = "openai/gpt-oss-20b"
 
 # ════════════════════════════════════════════════════════════════
 # CHROMADB — memoire long terme + RAG documents metier
@@ -503,6 +571,7 @@ Regles :
 - Utilise l outil explain_forecast (plutot que forecast) quand l utilisateur demande d expliquer, justifier ou detailler le calcul d une prevision -- pas seulement le chiffre
 - Utilise l outil agent_monitoring quand l utilisateur demande la performance du systeme ou si les donnees derivent
 - Quand tu donnes des recommandations, sois precis, concret et actionnable -- mais reste court (2-3 points maximum, pas un plan d action complet)
+- Pour une question de strategie/recommandation GENERALE (ex: "comment ameliorer la rentabilite ?"), reste sur des conseils generiques ou appuie-toi sur un outil deja appele dans cette conversation -- N INVENTE JAMAIS un chiffre ou un fait specifique sur une agence/branche/segment precis (ex: "la branche Tourisme a une sinistralite elevee") sans l avoir obtenu d un outil DANS CE TOUR : certains croisements n existent meme pas dans les donnees (ex: aucun outil ne peut calculer un ratio sinistres/primes PAR BRANCHE, Sinistres n a pas de colonne branche) -- une affirmation specifique non verifiee est un cas de fabrication, pas une recommandation prudente
 - Si un contexte "Analyses passees pertinentes" t est fourni, appuie-toi dessus pour assurer la coherence avec tes reponses precedentes, mais ne le mentionne explicitement que si c est utile a la reponse
 - N utilise JAMAIS un nom d agence/region/branche mentionne uniquement dans les "Analyses passees pertinentes" comme parametre de filtre pour un appel d outil de cette reponse -- un filtre (agence/region/branche/n/mois_num) ne vient QUE d une demande explicite de l utilisateur dans son message actuel, jamais d une analyse passee rappelee
 - Si un resultat d outil contient une marque "tronque", precise a l utilisateur que seule une partie des resultats a ete analysee et propose d affiner la question si besoin (par exemple filtrer par agence ou par periode)
@@ -512,7 +581,9 @@ Regles :
 - ATTENTION : clients_a_risque et part_risque_pct (dans risk_analysis et dans les rapports generes) sont TOUJOURS des chiffres du portefeuille entier, meme quand un filtre agence/region/branche est applique ailleurs dans la reponse -- ne jamais laisser entendre que ces deux chiffres precis sont filtres sur le perimetre demande
 - Si l utilisateur demande la LISTE, des identifiants, ou des exemples concrets de clients a risque (pas juste un pourcentage), utilise l outil risk_clients (liste nominative calculee en direct sur le portefeuille complet) plutot que risk_analysis (qui ne donne qu un chiffre agrege fige issu de la segmentation K-Means, non recalculable par filtre)
 - Le champ niveau_risque de risk_clients distingue un "Risque eleve" ordinaire d un "Sinistre exceptionnel isole" (ratio S/P tres eleve du a UN sinistre catastrophique, pas un pattern recurrent) -- reprends cette distinction dans ta reponse plutot que de presenter un ratio a plusieurs milliers de % sans contexte, ce qui pourrait sembler etre une erreur de calcul
-- Indique toujours l'URL directe du rapport généré sous forme de texte brut cliquable que l'utilisateur peut copier."""
+- N'ECRIS JAMAIS l'URL/le lien du rapport genere dans ta reponse, ni sous forme de texte brut ni sous forme de lien markdown [texte](url) -- les boutons Visualiser/Telecharger s'affichent automatiquement sous ta reponse (ajoutes cote serveur, jamais par toi). Decris simplement ce que contient le rapport genere.
+- Si l utilisateur nomme 2 ou 3 agences/villes precises a comparer entre elles (ex: "compare Sfax et Tunis"), appelle portfolio_summary UNE FOIS PAR nom cite plutot que compare_agencies -- ce dernier renvoie les 77 agences sans filtre possible, ce qui t oblige a retrouver les lignes voulues dans une longue liste tronquee au lieu d obtenir directement les chiffres demandes. Reserve compare_agencies aux demandes de classement/vue d ensemble complete ("quelle agence est la plus rentable ?", "compare toutes les agences").
+- IMPORTANT -- agence vs region : un nom de gouvernorat/ville tunisienne (ex: "Tunis", "Sfax", "Sousse") ne correspond PAS forcement au nom d une agence precise -- les agences MAE portent souvent un nom de quartier/rue distinct (ex: aucune agence ne s appelle litteralement "Tunis", ses agences s appellent "Place Barcelone", "Bab Benat", etc.). Si le nom cite par l utilisateur ne designe pas clairement une agence precise (ex: un numero de bureau comme "Sfax 3", ou un nom d agence dont tu es deja sûr comme "Bizerte"), utilise le parametre REGION plutot qu AGENCE -- un resultat a 0 partout (ca_total=0, nb_clients=0) signifie presque toujours que le nom ne correspond a aucune agence et qu il fallait filtrer par region a la place."""
 
 # ════════════════════════════════════════════════════════════════
 # TOOL DEFINITIONS — format OpenAI/Groq
@@ -542,7 +613,7 @@ TOOL_DEFS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "n":       {"type": "integer", "description": "Nombre d agences a retourner (defaut 5)"},
+                    "n":       {"type": ["integer", "null"], "description": "Nombre d agences a retourner (defaut 5)"},
                     "agence":  {"type": "string",  "description": "Filtrer sur une agence precise (optionnel)"},
                     "region":  {"type": "string",  "description": "Filtrer sur une region precise (optionnel)"},
                     "branche": {"type": "string",  "description": "Filtrer sur une branche precise (optionnel)"},
@@ -559,7 +630,7 @@ TOOL_DEFS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "mois_num": {"type": "integer", "description": "Numero du mois 1-12 (optionnel, omis = toute annee)"},
+                    "mois_num": {"type": ["integer", "null"], "description": "Numero du mois 1-12 (optionnel, omis = toute annee)"},
                 },
                 "required": []
             }
@@ -573,7 +644,7 @@ TOOL_DEFS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "mois_num": {"type": "integer", "description": "Numero du mois 1-12 (optionnel, omis = decomposition annuelle)"},
+                    "mois_num": {"type": ["integer", "null"], "description": "Numero du mois 1-12 (optionnel, omis = decomposition annuelle)"},
                 },
                 "required": []
             }
@@ -599,7 +670,7 @@ TOOL_DEFS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "n_runs": {"type": "integer", "description": "Nombre d executions recentes a analyser (defaut 50)"},
+                    "n_runs": {"type": ["integer", "null"], "description": "Nombre d executions recentes a analyser (defaut 50)"},
                 },
                 "required": []
             }
@@ -621,7 +692,7 @@ TOOL_DEFS = [
                     "agence":   {"type": "string",  "description": "Filtrer sur une agence precise (optionnel)"},
                     "region":   {"type": "string",  "description": "Filtrer sur une region precise (optionnel)"},
                     "branche":  {"type": "string",  "description": "Filtrer sur une branche precise (optionnel)"},
-                    "mois_num": {"type": "integer", "description": "Restreindre les previsions a un mois 1-12 (optionnel)"},
+                    "mois_num": {"type": ["integer", "null"], "description": "Restreindre les previsions a un mois 1-12 (optionnel)"},
                     "sections": {
                         "type": "array",
                         "items": {"type": "string", "enum": ["resume", "agences", "previsions", "risques"]},
@@ -641,7 +712,7 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "segments",
-            "description": "Profils complets des 7 segments K-Means (Client Premium, Client Fidele, Client Grand Contrat, Client Capital Eleve, Client Economique, Client a Risque, Clientele Feminine). CA moyen, bonus-malus, nb contrats, risque.",
+            "description": "Profils complets des 7 segments K-Means (Client Premium, Client Grand Contrat, Client Capital Eleve, Client Economique, Client a Risque, Client Jeune Conducteur, Autres Clients -- voir circulaire_segmentation.md pour le detail de chaque profil). CA moyen, bonus-malus, nb contrats, risque.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -685,7 +756,7 @@ TOOL_DEFS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "n":       {"type": "integer", "description": "Nombre de clients a retourner (defaut 20)"},
+                    "n":       {"type": ["integer", "null"], "description": "Nombre de clients a retourner (defaut 20)"},
                     "agence":  {"type": "string",  "description": "Filtrer sur une agence precise (optionnel)"},
                     "region":  {"type": "string",  "description": "Filtrer sur une region precise (optionnel)"},
                     "branche": {"type": "string",  "description": "Filtrer sur une branche precise (optionnel)"},
@@ -722,7 +793,7 @@ TOOL_DEFS = [
         "type": "function",
         "function": {
             "name": "compare_agencies",
-            "description": "Benchmark detaille entre toutes les agences : CA, nombre contrats, prime moyenne, sinistres, ratio sinistres/primes. Ideal pour comparer les performances.",
+            "description": "Benchmark de TOUTES les agences (77, non filtrable) : CA, nombre contrats, prime moyenne, sinistres, ratio sinistres/primes. Pour un classement/vue d'ensemble complete uniquement -- si l'utilisateur nomme 2 ou 3 agences precises a comparer entre elles, utilise plutot portfolio_summary une fois par agence nommee (bien plus direct qu'extraire 2 lignes d'une liste de 77).",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -789,9 +860,22 @@ DEGRADED_MODE_ROUTES = [
     (("branche",),                                                        "branch_analysis"),
     (("agence", "agences", "compar"),                                     "compare_agencies"),
     (("client", "clients", "profil", "démographique", "demographique"),   "profil_clients"),
+    # v2.6 -- ajoute apres coup (grille de test) : "derive"/"monitoring" et
+    # les questions metier (garanties, Sayartek, declaration) ne matchaient
+    # AUCUNE route existante -> _degraded_mode_response() renvoyait None ->
+    # _error_response() avec le texte brut de l erreur Groq (429/413),
+    # affiche tel quel a l utilisateur au lieu d une reponse utile.
+    (("derive", "dérive", "monitoring", "performance du systeme",
+      "performance du système"),                                          "agent_monitoring"),
     (("portefeuille", "chiffre d'affaires", "chiffre d affaires",
       "ca total", "resume", "résumé"),                                    "portfolio_summary"),
 ]
+
+# v2.6 -- consulter_documents_metier exige un parametre "query" (pas dans
+# le routeur ci-dessus, reserve aux outils sans parametre obligatoire) :
+# route separee qui reutilise directement la question de l utilisateur
+# comme requete de recherche semantique.
+DEGRADED_MODE_RAG_KEYWORDS = ("garantie", "garanties", "sayartek", "déclaration", "declaration")
 
 
 # ════════════════════════════════════════════════════════════════
@@ -799,7 +883,7 @@ DEGRADED_MODE_ROUTES = [
 # ════════════════════════════════════════════════════════════════
 class MAEAgent:
     """
-    Agent ReAct pour la MAE — Ollama local (Qwen2.5-3B, GPU), voir v2.5.
+    Agent ReAct pour la MAE — Groq cloud (openai/gpt-oss-20b), voir v2.6.
     tools_map injecte depuis main.py (pas d import circulaire).
     Le tool RAG (consulter_documents_metier) et la memoire long terme sont
     geres directement ici, independamment de main.py. Ils degradent
@@ -816,8 +900,8 @@ class MAEAgent:
         # "outil inconnu" cote agent si le modele essaie de l appeler.
         self.tools_map = {**tools_map, "consulter_documents_metier": consulter_documents_metier}
 
-        self.client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
-        self.model  = OLLAMA_MODEL
+        self.client = OpenAI(base_url=GROQ_BASE_URL, api_key=os.getenv("GROQ_API_KEY", ""))
+        self.model  = GROQ_MODEL
 
         # Ingestion RAG idempotente au premier demarrage de l agent —
         # no-op silencieux si RAG_AVAILABLE est False.
@@ -825,12 +909,12 @@ class MAEAgent:
 
     def _call_llm_with_retry(self, messages: list):
         """
-        Appelle le modele local (Ollama) avec retry + backoff exponentiel
-        (v2.2). Un echec transitoire (Ollama pas encore charge en memoire,
-        timeout local) ne fait plus echouer tout le tour de conversation
-        des la premiere tentative. Apres MAX_LLM_RETRIES echecs, l
-        exception est re-levee pour etre geree par l appelant (qui
-        renvoie une reponse d erreur propre a l utilisateur).
+        Appelle le modele (Groq) avec retry + backoff exponentiel (v2.2).
+        Un echec transitoire (rate limit, timeout reseau, 5xx cote Groq)
+        ne fait plus echouer tout le tour de conversation des la premiere
+        tentative. Apres MAX_LLM_RETRIES echecs, l exception est re-levee
+        pour etre geree par l appelant (qui renvoie une reponse d erreur
+        propre a l utilisateur).
         """
         last_exception = None
         for attempt in range(MAX_LLM_RETRIES + 1):
@@ -842,32 +926,28 @@ class MAEAgent:
                     tool_choice="auto",
                     max_tokens=2048,
                     temperature=0.1,
-                    # v2.5 -- un modele local plus petit (Qwen2.5-3B) peut
-                    # degenerer en repetition (observe empiriquement sur
-                    # profil_clients : la meme phrase reformulee en boucle
-                    # jusqu a max_tokens). frequency_penalty est le parametre
-                    # OpenAI standard ; repeat_penalty (extra_body) est
-                    # l equivalent natif Ollama -- les deux sont passes pour
-                    # couvrir le cas ou l un des deux n est pas honore.
+                    # v2.6 -- frequency_penalty (parametre OpenAI standard,
+                    # honore par Groq) limite la repetition. extra_body avec
+                    # options.repeat_penalty (v2.5) etait specifique au
+                    # serveur Ollama et retire ici -- Groq n a pas cette cle.
                     frequency_penalty=0.4,
-                    extra_body={"options": {"repeat_penalty": 1.3}},
                 )
             except Exception as e:
                 last_exception = e
                 if attempt < MAX_LLM_RETRIES:
                     wait_s = LLM_RETRY_BASE_SEC * (attempt + 1)
                     logging.warning(
-                        f"Erreur modele local (tentative {attempt + 1}/{MAX_LLM_RETRIES + 1}): {e} "
+                        f"Erreur modele (tentative {attempt + 1}/{MAX_LLM_RETRIES + 1}): {e} "
                         f"— nouvel essai dans {wait_s:.1f}s"
                     )
                     time.sleep(wait_s)
                 else:
-                    logging.error(f"Erreur modele local apres {MAX_LLM_RETRIES + 1} tentatives: {e}")
+                    logging.error(f"Erreur modele apres {MAX_LLM_RETRIES + 1} tentatives: {e}")
         raise last_exception
 
     def _degraded_mode_response(self, user_message: str):
         """
-        Reponse de secours quand le modele local reste indisponible apres
+        Reponse de secours quand le modele reste indisponible apres
         tous les retries (voir _call_llm_with_retry). Pas d IA ici : un routeur par
         mots-cles (DEGRADED_MODE_ROUTES) appelle DIRECTEMENT l un des
         outils sans parametre obligatoire et renvoie ses donnees brutes,
@@ -881,6 +961,20 @@ class MAEAgent:
         l intention si rien ne correspond).
         """
         lower = user_message.lower()
+
+        # v2.6 -- verifie d abord le RAG (garanties/procedures/documents metier) :
+        # seul outil du mode degrade qui exige un parametre (query), route separee
+        # de DEGRADED_MODE_ROUTES qui n appelle que des outils sans argument.
+        if any(kw in lower for kw in DEGRADED_MODE_RAG_KEYWORDS):
+            fn = self.tools_map.get("consulter_documents_metier")
+            if fn:
+                try:
+                    result = fn(user_message)
+                    if not (isinstance(result, dict) and "error" in result):
+                        return "consulter_documents_metier", result
+                except Exception as e:
+                    logging.warning(f"Mode degrade: echec de consulter_documents_metier ({e})")
+
         for keywords, tool_name in DEGRADED_MODE_ROUTES:
             if not any(kw in lower for kw in keywords):
                 continue
@@ -956,6 +1050,27 @@ class MAEAgent:
         # parametres differents -- attendre plus longtemps ne fait que
         # gaspiller du temps et des iterations pour le meme resultat final.
         MAX_SAME_TOOL_CALLS = 1
+        # v2.6 -- BUG CORRIGE : ce compteur PAR NOM bloquait aussi un
+        # comparatif legitime a 2 entites (ex: "compare Sfax et Tunis" ->
+        # portfolio_summary(region=Sfax) PUIS portfolio_summary(region=Tunis),
+        # deux appels utiles avec des arguments reellement differents,
+        # confirme dans les logs). Le nouveau modele (v2.6, contrairement au
+        # 3B local qui a motive ce garde-fou) sait produire ce genre
+        # d'enchainement correct -- le bloquer cree la boucle qu'il est cense
+        # prevenir. Les outils qui acceptent un parametre de portee
+        # (agence/region/branche/n/mois_num/query) sont donc exemptes de ce
+        # compteur PAR NOM : seule la detection par SIGNATURE EXACTE
+        # (called_signatures, ci-dessous) s'applique a eux, ce qui bloque
+        # toujours un vrai doublon (memes arguments) sans bloquer un
+        # deuxieme appel legitime avec des arguments differents. Les outils
+        # SANS parametre (segments, compare_agencies, sinistres_stats...)
+        # restent sous le compteur strict : un deuxieme appel sans argument
+        # ne peut jamais etre qu'un doublon ou une impasse.
+        TOOLS_WITH_SCOPE_PARAMS = {
+            "portfolio_summary", "top_agencies", "forecast", "explain_forecast",
+            "agent_monitoring", "generate_report", "risk_analysis", "risk_clients",
+            "consulter_documents_metier",
+        }
 
         # MLflow tracking
         mlflow_active = False
@@ -976,27 +1091,35 @@ class MAEAgent:
                 try:
                     response = self._call_llm_with_retry(messages)
                 except Exception as e:
-                    logging.error(f"Erreur modele local (definitif apres retries): {e}")
+                    logging.error(f"Erreur modele (definitif apres retries): {e}")
                     degraded = self._degraded_mode_response(user_message)
                     if degraded:
                         tool_name, result = degraded
                         duration_ms = int((time.time() - start_time) * 1000)
                         answer = (
-                            "⚠️ **Mode degrade** : le modele IA local (Ollama) est temporairement "
+                            "⚠️ **Mode degrade** : le modele IA (Groq) est temporairement "
                             "indisponible, impossible de generer une reponse redigee. Voici "
                             f"les donnees brutes les plus pertinentes trouvees pour votre "
                             f"question (outil `{tool_name}`) :\n\n```json\n"
                             f"{json.dumps(result, ensure_ascii=False, indent=2, default=str)}\n```"
                         )
-                        logging.info(f"Mode degrade active -> {tool_name} (modele local indisponible)")
+                        logging.info(f"Mode degrade active -> {tool_name} (modele indisponible)")
                         return {
                             "answer":      answer,
                             "tool_calls":  [{"tool": tool_name, "inputs": {}, "result_summary": str(result)[:200]}],
-                            "thinking":    thinking_log + [f"[mode degrade] modele local indisponible, routage mots-cles -> {tool_name}"],
+                            "thinking":    thinking_log + [f"[mode degrade] modele indisponible, routage mots-cles -> {tool_name}"],
                             "tokens_used": 0,
                             "duration_ms": duration_ms,
                         }
-                    return self._error_response(str(e), tool_calls_log, thinking_log, start_time)
+                    # v2.6 -- str(e) sur une erreur Groq (429/413) est un blob JSON technique
+                    # (org_id, quotas, lien de facturation Groq) : jamais expose tel quel a un
+                    # utilisateur metier, le detail complet reste dans les logs (deja journalise
+                    # ci-dessus via logging.error).
+                    return self._error_response(
+                        "Le service IA est temporairement surcharge (limite de requetes "
+                        "atteinte). Veuillez patienter une minute avant de reessayer.",
+                        tool_calls_log, thinking_log, start_time
+                    )
 
                 msg = response.choices[0].message
 
@@ -1009,7 +1132,7 @@ class MAEAgent:
                 empty_retries = 0
                 while not msg.tool_calls and not (msg.content and msg.content.strip()) and empty_retries < 2:
                     empty_retries += 1
-                    logging.warning(f"Reponse vide du modele local, nouvel essai ({empty_retries}/2)")
+                    logging.warning(f"Reponse vide du modele, nouvel essai ({empty_retries}/2)")
                     try:
                         response = self._call_llm_with_retry(messages)
                         msg = response.choices[0].message
@@ -1114,9 +1237,10 @@ class MAEAgent:
                     )
                     logging.info(f"Tool call: {tool_name} | inputs: {tool_inputs}")
 
-                    tool_name_counts[tool_name] = tool_name_counts.get(tool_name, 0) + 1
-                    if tool_name_counts[tool_name] > MAX_SAME_TOOL_CALLS:
-                        repeat_detected = True
+                    if tool_name not in TOOLS_WITH_SCOPE_PARAMS:
+                        tool_name_counts[tool_name] = tool_name_counts.get(tool_name, 0) + 1
+                        if tool_name_counts[tool_name] > MAX_SAME_TOOL_CALLS:
+                            repeat_detected = True
 
                     sig = (tool_name, json.dumps(tool_inputs, sort_keys=True, ensure_ascii=False))
                     if sig in called_signatures:
@@ -1152,6 +1276,15 @@ class MAEAgent:
                             if unknown:
                                 logging.warning(f"Parametre(s) invente(s) ignore(s) pour {tool_name}: {unknown}")
                                 tool_inputs = {k: v for k, v in tool_inputs.items() if k in valid_params}
+                            # v2.6 -- les schemas de parametres optionnels (n, mois_num,
+                            # n_runs...) acceptent desormais explicitement null (voir
+                            # TOOL_DEFS : Groq rejette un null sur un type "integer" strict
+                            # avec une 400 "expected integer, but got null"). Un null
+                            # explicite doit degenerer vers OMIS (valeur par defaut de
+                            # l outil, ex n=5), pas ecraser silencieusement ce defaut --
+                            # fn(n=None).head(None) renverrait TOUTES les lignes au lieu
+                            # du top N attendu.
+                            tool_inputs = {k: v for k, v in tool_inputs.items() if v is not None}
                             try:
                                 result = fn(**tool_inputs)
                             except Exception as e:
@@ -1196,7 +1329,7 @@ class MAEAgent:
                     duration_ms = int((time.time() - start_time) * 1000)
                     donnees = {t_name: t_result for (t_name, _args), t_result in called_signatures.items()}
                     answer = (
-                        "**Reponse partielle** : le modele local a rappele plusieurs fois "
+                        "**Reponse partielle** : le modele a rappele plusieurs fois "
                         "le meme outil sans parvenir a rediger de synthese. Voici les "
                         "donnees reelles obtenues directement depuis le portefeuille :\n\n"
                         f"{_format_fallback_data(donnees)}"

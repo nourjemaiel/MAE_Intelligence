@@ -16,3 +16,8 @@ mae_backend/chroma_db/
 mae_backend/reports/
 mae_backend/eval_results/
 .pytest_cache/
+
+# Contrats/sinistres cosmetiques generes en direct par simulator() (voir
+# get_full_df()) -- grandit a chaque tick, jamais du code source.
+mae_backend/live_delta_contrats.jsonl
+mae_backend/live_delta_sinistres.jsonl

@@ -15,7 +15,7 @@ des 7 segments identifiés par l'analyse de segmentation du portefeuille
 
 ## Client Premium (9,3% du portefeuille, 6 795 clients)
 
-CA moyen le plus élevé (612 TND), bonus-malus bas (2,9), 10,8 contrats en
+CA moyen le plus élevé (612 TND), bonus-malus bas (3), 10,8 contrats en
 moyenne — clients fidèles à forte valeur. Ratio sinistres/primes de 43,3%,
 le plus bas devant Client Grand Contrat.
 
@@ -32,14 +32,22 @@ TND). Ratio sinistres/primes le plus bas du portefeuille (37,1%).
 renouvellement prioritaire, point de contact dédié pour sécuriser ce
 contrat à forte valeur.
 
-## Client Fidèle (12,9%, 9 396 clients)
+## Client Jeune Conducteur (12,9%, 9 396 clients)
 
-Durée de contrat la plus longue du portefeuille, bonus-malus le plus élevé
-des 7 segments (6,7) — base de clientèle stable malgré ce bonus-malus.
-Ratio sinistres/primes modéré (50,3%).
+Le plus jeune des 7 segments de loin (46 ans en moyenne, contre 54 ans sur
+l'ensemble du portefeuille — l'écart le plus marqué de tous les segments,
+bien plus que son propre bonus-malus). Cohérent avec les deux autres traits
+du segment : le bonus-malus le plus élevé des 7 segments (7) et la durée
+moyenne de contrat la plus courte — des conducteurs jeunes et récemment
+assurés démarrent plus haut sur l'échelle bonus-malus et n'ont pas encore
+eu le temps de la faire baisser. Chiffre d'affaires moyen correct malgré
+tout (260 TND, 2e derrière Premium et Grand Contrat). Ratio
+sinistres/primes modéré (50,3%).
 
-**Actions recommandées** : programme de reconnaissance de fidélité,
-renouvellement facilité.
+**Actions recommandées** : offres d'accompagnement/fidélisation ciblant les
+jeunes conducteurs (le bonus-malus élevé baissera avec l'ancienneté si le
+client est retenu), pédagogie sur le fonctionnement du bonus-malus dès la
+souscription.
 
 ## Client Capital Élevé (3,2%, 2 317 clients)
 
@@ -53,7 +61,7 @@ tarification reflète bien l'exposition réelle.
 
 Ratio sinistres/primes le plus élevé du portefeuille (62,4%) — critère de
 nommage de ce segment (pas le bonus-malus, qui est au contraire l'un des
-plus bas, 2,0 : la sinistralité de ce segment n'est pas liée à un
+plus bas, 2 : la sinistralité de ce segment n'est pas liée à un
 historique de conduite dégradé mais à un ratio coût/prime défavorable).
 
 **Actions recommandées** : révision de la politique tarifaire pour ce
@@ -69,13 +77,31 @@ sinistres/primes de 52,5%.
 **Actions recommandées** : digitalisation du parcours pour réduire le coût
 d'acquisition et de gestion, offres packagées.
 
-## Clientèle Féminine (16,4%, 11 886 clients)
+## Autres Clients (16,4%, 11 886 clients)
 
-Segment démographiquement distinct (écart le plus marqué vers la clientèle
-féminine parmi les 7 segments). Ratio sinistres/primes de 52,7%.
+Sur le plan financier, ce segment est presque indiscernable du segment
+Client Économique : prime moyenne 50,8 TND, 3,3 contrats en moyenne,
+bonus-malus 2, ratio sinistres/primes 52,7% (contre 52,5% pour Client
+Économique). Si on ne regardait que le chiffre d'affaires ou le risque,
+les deux segments seraient à peine distinguables.
 
-**Actions recommandées** : analyser les garanties les plus souscrites par
-ce segment pour adapter la communication et l'offre.
+Ce qui les sépare réellement : ce segment est composé à 94,3% de clientes
+femmes, contre seulement 3,7% pour Client Économique et 24,5% en moyenne
+sur l'ensemble du portefeuille (aucun autre segment ne dépasse 30,3%).
+L'algorithme de clustering a donc détecté une différence de comportement
+réelle, corrélée au genre, qui n'apparaît pas dans les indicateurs
+financiers agrégés ci-dessus. Le nom volontairement neutre ("Autres
+Clients") évite de nommer ce segment directement sur cette base
+démographique : le genre est la variable la plus discriminante trouvée
+par l'algorithme pour CE groupe, mais ce n'est pas parce qu'une variable
+démographique sépare bien deux groupes que les autres segments en sont
+exclusifs pour autant — les autres segments ont eux aussi des clientes,
+simplement pas majoritairement.
+
+**Actions recommandées** : analyser spécifiquement les garanties et
+options les plus souscrites par ce segment (plutôt que son chiffre
+d'affaires, similaire à Client Économique) pour comprendre ce qui motive
+réellement cette séparation, et adapter la communication en conséquence.
 
 ## Principe général
 

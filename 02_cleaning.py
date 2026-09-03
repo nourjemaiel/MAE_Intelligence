@@ -1,7 +1,6 @@
 import pandas as pd
 import mlflow
 import os
-import math
 from datetime import datetime
 
 
@@ -57,61 +56,6 @@ mlflow.set_experiment("MAE_PFE_Final_Sync_2026")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # =================================================================
-# TABLE REGION → LOCALITE TUNISIENNE
-# =================================================================
-# Il n'existe pas de table officielle code -> région/localité (données
-# synthétiques, consigne du superviseur de stage : décoder nous-mêmes).
-# Convention retenue : les codes distincts sont triés puis répartis en 5
-# macro-régions de taille égale (Grand Tunis, Nord, Centre, Sud, Sahel),
-# et chaque code reçoit en plus le nom d'une localité tunisienne réelle et
-# DISTINCTE appartenant à ce bucket, pour éviter d'afficher le même
-# libellé de macro-région des dizaines de fois dans les filtres/graphes.
-# C'est un choix de présentation assumé et documenté, pas une déduction
-# géographique réelle. Décodé UNE SEULE FOIS ici (source de vérité) plutôt
-# que recalculé à chaque requête dans l'API.
-REGIONS_MACRO = ["Grand Tunis", "Nord", "Centre", "Sud", "Sahel"]
-
-TUNISIA_LOCALITIES = {
-    "Grand Tunis": [
-        "Tunis","Ariana","La Marsa","Carthage","Le Bardo","Ben Arous",
-        "Ezzahra","Mornag","Hammam Lif","Hammam Chott","Rades","Megrine",
-        "La Goulette","Manouba","Den Den","Oued Ellil","Douar Hicher",
-        "El Mourouj","Mnihla","Sidi Thabet","Kalaat Andalous","La Soukra",
-        "Raoued","Sidi Hassine","El Omrane","Bab Souika",
-    ],
-    "Nord": [
-        "Bizerte","Menzel Bourguiba","Mateur","Ras Jebel","Ghar El Melh",
-        "Beja","Medjez El Bab","Testour","Nefza","Jendouba","Tabarka",
-        "Ain Draham","Fernana","Bou Salem","Le Kef","Tajerouine",
-        "Kalaat Senan","Sakiet Sidi Youssef","Siliana","Bargou","Gaafour",
-        "Zaghouan","El Fahs","Nabeul","Hammamet","Kelibia",
-    ],
-    "Sahel": [
-        "Sousse","Msaken","Kalaa Kebira","Kalaa Seghira","Hammam Sousse",
-        "Akouda","Enfidha","Bouficha","Monastir","Moknine","Jemmal",
-        "Ksar Hellal","Ksibet El Mediouni","Sayada","Bembla","Mahdia",
-        "Ksour Essef","El Jem","Chebba","Melloulech","Souassi","Chorbane",
-        "Bou Merdes","Ouled Chamekh","Hbira",
-    ],
-    "Centre": [
-        "Kairouan","Sbikha","Haffouz","Nasrallah","Chebika","El Alaa",
-        "Bouhajla","Oueslatia","Hajeb El Ayoun","Menzel Mehiri",
-        "Sidi Bouzid","Regueb","Menzel Bouzaiane","Mezzouna","Bir El Hafey",
-        "Ouled Haffouz","Meknassy","Souk Jedid","Kasserine","Sbeitla",
-        "Feriana","Thala","Hassi El Ferid","Foussana","Jedelienne","El Ayoun",
-    ],
-    "Sud": [
-        "Sfax","Sakiet Eddaier","Sakiet Ezzit","Jebeniana","Mahres","El Amra",
-        "Bir Ali Ben Khalifa","Menzel Chaker","Gabes","Ghannouch","Mareth",
-        "Metouia","El Hamma","Medenine","Ben Gardane","Zarzis","Houmt Souk",
-        "Midoun","Ajim","Tataouine","Remada","Ghomrassen","Bir Lahmar",
-        "Kebili","Douz","Souk Lahad","Tozeur","Nefta","Degache","Gafsa",
-        "Metlaoui","Redeyef",
-    ],
-}
-
-
-# =================================================================
 # TABLE AGENCE → VRAI RESEAU D'AGENCES MAE
 # =================================================================
 # Verifie (remarque superviseur) : le fichier brut contient 77 codes AGENCE
@@ -163,6 +107,56 @@ MAE_AGENCY_NAMES = [
     "Nouvelle Médina", "Yasminette", "Maison Chery",
 ]
 
+# =================================================================
+# TABLE AGENCE → GOUVERNORAT TUNISIEN REEL
+# =================================================================
+# CORRIGE (remarque utilisateur) : la Region etait auparavant decodee
+# INDEPENDAMMENT de l'agence (bucketing du code Region brut, sans lien avec
+# le code AGENCE) -- verifie sur les donnees reelles que les deux codes ne
+# correspondent pas de facon fiable (voir commentaire au point d'usage,
+# clean_augment_shift() etape 6), ce qui produisait des paires
+# absurdes (ex. agence "Bizerte" affichee sous la region "Hammam Lif").
+# Ici, chaque agence MAE (liste MAE_AGENCY_NAMES ci-dessus, noms reels)
+# est associee a son VRAI gouvernorat tunisien -- verifiable ville par
+# ville, pas une convention arbitraire comme l'ancien systeme de
+# macro-regions/localites inventees. Meme ordre/regroupement que
+# MAE_AGENCY_NAMES pour faciliter la relecture et la verification.
+MAE_AGENCY_REGIONS = [
+    # Grand Tunis (gouvernorat de Tunis, sauf Ettadhamen/Ariana-Soukra-
+    # Ennasr-El Menzah-Raoued qui sont administrativement dans le
+    # gouvernorat d'Ariana)
+    "Tunis", "Tunis", "Tunis", "Tunis", "Tunis",
+    "Tunis", "Tunis", "Tunis", "Tunis", "Tunis",
+    "Tunis", "Tunis", "Ariana", "Tunis", "Tunis",
+    "Tunis", "Tunis", "Tunis", "Tunis", "Tunis",
+    "Tunis",
+    # Nord
+    "Bizerte", "Bizerte", "Ariana", "Ariana", "Ariana",
+    "Ariana", "Ariana", "Jendouba", "Jendouba", "Jendouba",
+    "Béja", "Béja", "Béja", "Béja",
+    # Sahel / Centre côtier
+    "Sousse", "Sousse", "Sousse", "Sousse", "Sousse",
+    "Sousse", "Sousse", "Sousse", "Monastir", "Monastir",
+    "Monastir", "Monastir", "Monastir", "Nabeul", "Nabeul",
+    "Nabeul", "Nabeul", "Nabeul", "Nabeul", "Nabeul",
+    "Nabeul", "Nabeul", "Nabeul",
+    # Sud
+    "Sfax", "Sfax", "Sfax", "Sfax", "Sfax",
+    "Kairouan", "Kairouan", "Gabès", "Gabès", "Gabès", "Gabès",
+    "Mahdia", "Mahdia", "Mahdia", "Médenine", "Médenine",
+    "Médenine", "Médenine", "Médenine", "Médenine",
+    "Gafsa", "Gafsa", "Gafsa", "Tataouine", "Tozeur",
+    # Ouest / autres
+    "Le Kef", "Le Kef", "Siliana", "Manouba", "Manouba", "Manouba",
+    "Zaghouan", "Kébili", "Kasserine", "Kasserine", "Kasserine", "Sidi Bouzid",
+    # Ben Arous
+    "Ben Arous", "Ben Arous", "Ben Arous", "Ben Arous", "Ben Arous",
+    "Ben Arous", "Ben Arous", "Ben Arous", "Ben Arous", "Ben Arous",
+    "Ben Arous", "Ben Arous", "Ben Arous",
+]
+
+AGENCY_TO_REGION = dict(zip(MAE_AGENCY_NAMES, MAE_AGENCY_REGIONS))
+
 
 def build_agency_label_map(codes):
     """
@@ -173,40 +167,6 @@ def build_agency_label_map(codes):
     """
     codes_sorted = sorted({str(c) for c in codes if c is not None and str(c).lower() != "nan"})
     return {code: MAE_AGENCY_NAMES[i % len(MAE_AGENCY_NAMES)] for i, code in enumerate(codes_sorted)}
-
-
-def build_region_label_map(codes):
-    """
-    Construit le dictionnaire {code_brut: "Nom localité"} pour TOUS les
-    codes région distincts trouvés dans le fichier. Convention assumée
-    (voir docstring du module) : buckets de taille égale par macro-région,
-    puis une localité réelle distincte par code au sein de chaque bucket.
-    """
-    def sort_key(c):
-        try:
-            return (0, float(c))
-        except (ValueError, TypeError):
-            return (1, str(c))
-
-    codes_sorted = sorted({str(c) for c in codes if c is not None and str(c).lower() != "nan"}, key=sort_key)
-    n = len(codes_sorted)
-    if n == 0:
-        return {}
-
-    buckets = len(REGIONS_MACRO)
-    size = math.ceil(n / buckets)
-
-    labels = {}
-    for i, code in enumerate(codes_sorted):
-        bucket_idx = min(i // size, buckets - 1)
-        macro = REGIONS_MACRO[bucket_idx]
-        localities = TUNISIA_LOCALITIES[macro]
-        pos_in_bucket = i - bucket_idx * size
-        locality = localities[pos_in_bucket % len(localities)]
-        if pos_in_bucket >= len(localities):
-            locality = f"{locality} {pos_in_bucket // len(localities) + 1}"
-        labels[code] = locality
-    return labels
 
 
 def clean_augment_shift(file_path, output_name, date_shift, agency_map):
@@ -317,19 +277,46 @@ def clean_augment_shift(file_path, output_name, date_shift, agency_map):
                 print(f"✅ AGENCE décodée en nom d'agence réelle (en place, {df['AGENCE'].nunique()} agences).")
 
             # ----------------------------------------------------------------
-            # 6. MAPPING REGION → localité tunisienne (remplace la colonne en place)
-            #    Décodé UNE SEULE FOIS ici (source de vérité pour tout le
-            #    pipeline : EDA, forecasting, clustering, API). L'API ne
-            #    doit plus recalculer ce mapping à partir d'un échantillon
-            #    en mémoire — voir main.py.
+            # 6. REGION → derivee du gouvernorat REEL de l'AGENCE (remplace
+            #    la colonne en place). Decodee UNE SEULE FOIS ici (source de
+            #    verite pour tout le pipeline : EDA, forecasting, clustering,
+            #    API).
+            #
+            #    CORRIGE (remarque utilisateur, verifie sur les donnees) :
+            #    l'ancienne version decodait le code Region BRUT independamment
+            #    du code AGENCE (bucketing par ordre de tri du code, sans lien
+            #    avec la geographie reelle) -- les deux codes n'ont jamais ete
+            #    concus pour correspondre. Verifie sur le fichier reel : un
+            #    code AGENCE donne partage bien UN SEUL code Region dans 61%
+            #    des cas (47/77), mais jusqu'a 4 codes Region differents pour
+            #    les autres -- pas de correspondance fiable exploitable. Cote
+            #    utilisateur, ca donnait des paires absurdes (agence "Bizerte"
+            #    affichee sous la region "Hammam Lif", agence "El Menzah" sous
+            #    la region "Bizerte", region "Grand Tunis" ne correspondant a
+            #    aucune agence reelle).
+            #
+            #    NOUVELLE APPROCHE : la Region est deduite directement du nom
+            #    d'agence deja decode (etape 5 ci-dessus), via
+            #    AGENCE_TO_REGION -- le gouvernorat tunisien REEL de chaque
+            #    agence MAE (pas une convention arbitraire : verifiable ville
+            #    par ville). Remplace l'ancien systeme a 5 macro-regions +
+            #    localites inventees (REGIONS_MACRO/TUNISIA_LOCALITIES,
+            #    retires) par les gouvernorats reels, une granularite a la
+            #    fois plus fine et plus honnete. Consequence assumee : le code
+            #    Region BRUT du fichier n'est plus utilise du tout (aucune
+            #    correspondance fiable avec la geographie reelle de l'agence
+            #    n'a pu etre etablie -- voir verification ci-dessus).
             # ----------------------------------------------------------------
-            if 'Region' in df.columns:
-                unique_region_codes = df['Region'].dropna().unique().tolist()
-                region_map = build_region_label_map(unique_region_codes)
-                df['Region'] = df['Region'].map(region_map).fillna('Region_Inconnue')
-                print(f"✅ Region décodée en localité tunisienne (en place, {len(unique_region_codes)} régions).")
+            # Uniquement si le fichier a NATIVEMENT une colonne Region --
+            # Sinistres n'en a jamais eu une (colonnes brutes verifiees),
+            # ne pas lui en ajouter une pour ne pas changer son schema.
+            if 'Region' in df.columns and 'AGENCE' in df.columns:
+                df['Region'] = df['AGENCE'].map(AGENCY_TO_REGION).fillna('Region_Inconnue')
+                print(f"✅ Region deduite du gouvernorat reel de l'agence (en place, {df['Region'].nunique()} gouvernorats).")
+            elif 'Region' in df.columns:
+                print("⚠️  Colonne 'AGENCE' absente de ce fichier — Region non deductible, conservee brute.")
             else:
-                print("⚠️  Colonne 'Region' absente de ce fichier — décodage ignoré.")
+                print("⚠️  Colonne 'Region' absente de ce fichier — decodage ignore.")
 
             # ----------------------------------------------------------------
             # 7. TIME SHIFT SÉLECTIF (décalage DYNAMIQUE -- voir

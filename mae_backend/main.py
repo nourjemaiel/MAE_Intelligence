@@ -23,6 +23,19 @@ Changelog v3.3 (2026-07, fix rapports PDF) :
   quand utiliser ces parametres".
 """
 
+import sys
+# Sous Windows, la console herite souvent de l'encodage ANSI local (cp1252),
+# qui ne sait pas encoder les emojis utilises dans les logs (⚠️, ✅...) --
+# print() plantait alors AU DEMARRAGE (UnicodeEncodeError) des qu'un message
+# d'avertissement (ex: CSV introuvable) tentait de s'afficher, un crash plus
+# grave que le probleme qu'il essayait de signaler. Force l'UTF-8 en sortie
+# quel que soit l'environnement d'ou uvicorn est lance.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -131,6 +144,45 @@ def _load_dynamic_users():
 def _save_dynamic_users(users):
     with open(_DYNAMIC_USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
+
+
+# Contrats/sinistres cosmetiques generes par le simulateur (voir simulator()
+# plus bas) -- persistes pour survivre a un redemarrage du backend, sinon le
+# compteur "Generes (live)" et les totaux qu'il alimente (CA/sinistres du
+# dashboard, voir get_full_df()) repartaient de zero a chaque relance alors
+# que le compteur affiche, lui, continuait de grimper (incoherent). Format
+# JSON Lines (une ligne = un contrat/sinistre) plutot qu'un tableau JSON
+# unique : chaque nouveau tick du simulateur APPEND une ligne (cout constant),
+# alors que reecrire un tableau entier grandissant a chaque tick couterait de
+# plus en plus cher avec le temps de fonctionnement du serveur. Le fichier
+# entier n'est relu qu'une fois, au demarrage (seed_data()).
+_LIVE_DELTA_PROD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "live_delta_contrats.jsonl")
+_LIVE_DELTA_SIN_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "live_delta_sinistres.jsonl")
+
+def _append_live_delta(path, record):
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+    except Exception:
+        pass
+
+def _load_live_delta(path):
+    if not os.path.exists(path):
+        return []
+    rows = []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception:
+        return []
+    return rows
 
 _dynamic_users = _load_dynamic_users()
 
@@ -612,8 +664,20 @@ def seed_data():
             # echantillon sinistres (3k/15k) tires INDEPENDAMMENT produit des ratios
             # par client statistiquement absurdes (numerateur et denominateur ne
             # portent pas sur les memes clients avec la meme completude).
-            _cols_full = [c for c in ["N_CLIENT", "AGENCE", "BRANCHE", "Region", "PRIME_NETTE"] if c in df_full.columns]
+            # SEXE/CSP/BONUS_MALUS sont de VRAIES colonnes du CSV (voir
+            # tool_profil_clients, qui lit desormais get_full_df() -- v2.5) ; AGE
+            # n'existe dans aucun fichier reel (seul DT_NAISS, jamais exploite),
+            # donc reste fabrique ici avec la meme distribution random.randint(22,72)
+            # que l'ancien echantillon live, pour ne rien changer au profil observe.
+            _cols_full = [c for c in ["N_CLIENT", "AGENCE", "BRANCHE", "Region", "PRIME_NETTE", "SEXE", "CSP", "BONUS_MALUS"] if c in df_full.columns]
             state["prod_full_df"] = df_full[_cols_full].copy()
+            if "SEXE" in state["prod_full_df"].columns:
+                state["prod_full_df"]["SEXE"] = state["prod_full_df"]["SEXE"].apply(lambda v: str(v) if pd.notna(v) else random.choice(["M", "F"]))
+            if "CSP" in state["prod_full_df"].columns:
+                state["prod_full_df"]["CSP"] = state["prod_full_df"]["CSP"].apply(lambda v: str(v) if pd.notna(v) else random.choice(CSP_LIST))
+            if "BONUS_MALUS" in state["prod_full_df"].columns:
+                state["prod_full_df"]["BONUS_MALUS"] = state["prod_full_df"]["BONUS_MALUS"].apply(lambda v: int(float(v)) if pd.notna(v) else 0)
+            state["prod_full_df"]["AGE"] = np.random.randint(22, 73, size=len(state["prod_full_df"]))
 
             if "DEBUT_PERI" in df_full.columns:
                 mois_series = pd.to_datetime(df_full["DEBUT_PERI"], errors="coerce").dt.month
@@ -697,7 +761,22 @@ def seed_data():
         print("⚠️  CSV sin introuvable -> synthetiques")
         _gen_synthetic_sin()
 
+    # Frontiere entre l'echantillon initial (deja compte dans prod_full_df/
+    # sin_full_df, lus depuis le CSV complet) et les contrats/sinistres
+    # cosmetiques ajoutes ensuite par simulator() -- voir get_full_df() plus
+    # bas, qui n'ajoute au portefeuille complet que ce qui vient APRES cette
+    # frontiere, pour ne jamais compter deux fois l'echantillon de depart.
+    state["_live_seed_count_prod"] = len(state["contrats"])
+    state["_live_seed_count_sin"]  = len(state["sinistres"])
+
+    # Rejoue les contrats/sinistres generes en direct lors des sessions
+    # precedentes (voir _append_live_delta() dans simulator()) : sans ceci,
+    # total_generated et les totaux qu'il alimente repartiraient de
+    # l'echantillon de depart a chaque redemarrage.
+    state["contrats"].extend(_load_live_delta(_LIVE_DELTA_PROD_FILE))
+    state["sinistres"].extend(_load_live_delta(_LIVE_DELTA_SIN_FILE))
     state["total_generated"] = len(state["contrats"])
+
     state["segments_summary"] = load_segments()
 
 
@@ -750,7 +829,11 @@ def load_segments():
             "segment":           row['Segment_Label'],
             "nb_clients":        int(row['nb_clients']),
             "ca_moyen":          round(row['ca_moyen'], 2),
-            "bm_moyen":          round(row['bm_moyen'], 2),
+            # Bonus-malus = un palier entier de la grille tarifaire (1, 2, 3...),
+            # jamais une valeur a decimale -- une moyenne arrondie a l'entier le
+            # plus proche reste lisible comme "palier typique du segment", pas
+            # comme "6,7" qui ne correspond a aucun palier reel.
+            "bm_moyen":          int(round(row['bm_moyen'])),
             "nb_contrats_moyen": round(row['nb_contrats_moyen'], 2),
             "ratio_sp_pct":      round(row['ratio_sp_pct'], 1),
             "risque":            row['risque'],
@@ -766,14 +849,12 @@ def load_segments():
 def load_accidents_forecast():
     """
     Lit outputs/previsions_accidents_12mois.csv (sortie de 08_accidents_
-    forecasting.py) -- prevision du NOMBRE d'accidents/mois, PAS le montant
-    regle (06_sinistres_forecasting.py, abandonne : restait plat quel que
-    soit le modele). Le nombre d'accidents a un comportement different (CV
-    ~0.06 contre ~1.27 pour le montant, tendance a la hausse detectable,
-    +9 accidents/mois -- voir le script) : Holt (tendance) l'emporte
-    nettement sur un backtest a horizon complet (RMSE 34.6 contre 59-68 pour
-    les modeles plats), donc la prevision est une vraie ligne croissante,
-    pas un artefact.
+    forecasting.py) -- prevision du NOMBRE d'accidents/mois via une
+    regression de Poisson (tendance + un terme d'alternance mois-haut/
+    mois-bas, voir build_features() dans le script). Borne_Basse/Borne_Haute
+    ont une largeur DYNAMIQUE (RMSE * sqrt(horizon)) : l'intervalle
+    s'elargit progressivement du mois 1 au mois 12, pas un +-RMSE constant
+    repete pour chaque mois.
     Remarque superviseur : retire le graphique d'importance des variables
     (encore un detail de mecanique de modele, pas un contenu pour la
     Direction Generale) et le remplace par cette prevision -- un vrai
@@ -860,12 +941,17 @@ def simulator(interval_seconds: int = 5):
                 "TRIMESTRE":   (mois - 1) // 3 + 1,
                 "timestamp":   datetime.now().isoformat(),
             }
+            # v2.6 : les contrats/sinistres simules sont ajoutes a
+            # state["contrats"]/["sinistres"] ET pris en compte par
+            # get_full_df() (voir plus bas) -- donc par tous les outils qui
+            # en dependent (KPIs, sinistres-stats, portfolio_summary...),
+            # de facon coherente entre eux puisqu'ils passent tous par ce
+            # meme point d'entree. Persistes en JSON Lines (append, cout
+            # constant) pour survivre a un redemarrage -- voir
+            # _append_live_delta()/_load_live_delta() plus haut.
             state["contrats"].append(new_c)
             state["total_generated"] += 1
-            state["ca_total_reel"]    = state.get("ca_total_reel", 0.0) + new_c["PRIME_NETTE"]
-            state["nb_contrats_reel"] = state.get("nb_contrats_reel", 0) + 1
-            by_month = state.setdefault("ca_by_month_reel", {})
-            by_month[mois] = by_month.get(mois, 0) + new_c["PRIME_NETTE"]
+            _append_live_delta(_LIVE_DELTA_PROD_FILE, new_c)
 
             if random.random() < 0.30:
                 new_s = {
@@ -877,7 +963,7 @@ def simulator(interval_seconds: int = 5):
                     "timestamp":   datetime.now().isoformat(),
                 }
                 state["sinistres"].append(new_s)
-                state["sin_total_reel"] = state.get("sin_total_reel", 0.0) + new_s["REGLEMENTS"]
+                _append_live_delta(_LIVE_DELTA_SIN_FILE, new_s)
             state["last_update"] = datetime.now().isoformat()
 
         # ── Data drift : evalue et journalise EN CONTINU, pas seulement ──
@@ -901,22 +987,67 @@ def simulator(interval_seconds: int = 5):
         state["drift_alert_active"] = new_alert
 
 
-def get_df():
-    with state["lock"]:
-        return pd.DataFrame(list(state["contrats"])), pd.DataFrame(list(state["sinistres"]))
+def _live_delta_df(records, seed_count, base_columns):
+    """
+    Les lignes de `records` ajoutees APRES `seed_count` par simulator() --
+    jamais l'echantillon initial (deja dans base_columns/prod_full_df, tire
+    du meme CSV complet), sous peine de compter ces lignes deux fois.
+    """
+    new_rows = records[seed_count:]
+    if not new_rows:
+        return None
+    cols = [c for c in base_columns if c in new_rows[0]]
+    return pd.DataFrame(new_rows)[cols]
 
 
 def get_full_df():
     """
     Renvoie les dataframes prod/sinistres COMPLETS (toutes les lignes du CSV
-    nettoye, pas l'echantillon de 10k/3k utilise par get_df() pour le flux
-    temps reel simule). Ecrit une seule fois au demarrage (seed_data), jamais
-    modifie ensuite par le simulateur -- pas besoin du lock de state["contrats"].
-    A utiliser pour toute agregation PAR CLIENT ou la completude des deux
-    cotes (primes ET sinistres) doit correspondre au meme client, sous peine
-    de ratios faux (voir commentaire dans seed_data()).
+    nettoye) PLUS les contrats/sinistres cosmetiques generes depuis le
+    demarrage par simulator() -- pour que le tableau de bord bouge reellement
+    a chaque nouveau contrat (remarque : le dashboard doit refleter le live,
+    pas juste re-interroger un total fige). Un seul point d'entree pour toute
+    agregation "portefeuille actuel" : chaque appelant (KPIs, graphes,
+    resume agent) voit exactement le meme delta live, evitant le probleme
+    d'origine (certains outils comptaient les contrats simules et d'autres
+    non). Le delta est recalcule a chaque appel (liste Python, pas de lock :
+    une lecture legerement en retard sur un append concurrent est sans
+    consequence ici) -- l'echantillon initial, lui, reste fige depuis
+    seed_data() et n'est jamais recalcule.
     """
-    return state.get("prod_full_df", pd.DataFrame()), state.get("sin_full_df", pd.DataFrame())
+    prod_base = state.get("prod_full_df", pd.DataFrame())
+    sin_base  = state.get("sin_full_df", pd.DataFrame())
+
+    live_prod = _live_delta_df(state["contrats"],  state.get("_live_seed_count_prod", 0), prod_base.columns)
+    live_sin  = _live_delta_df(state["sinistres"], state.get("_live_seed_count_sin", 0),  sin_base.columns)
+
+    prod = pd.concat([prod_base, live_prod], ignore_index=True) if live_prod is not None else prod_base
+    sin  = pd.concat([sin_base, live_sin], ignore_index=True)   if live_sin  is not None else sin_base
+    return prod, sin
+
+
+def _live_month_sums():
+    """
+    Meme delta live que get_full_df(), mais groupe par MOIS -- pour le seul
+    endroit (le cas non filtre de /api/ca-by-month) qui lit encore les
+    totaux figes ca_by_month_reel/ca_total_reel au lieu de get_full_df(),
+    pour rester rapide. Sans ce complement, /api/kpis (qui passe par
+    get_full_df()) et /api/ca-by-month non filtre afficheraient deux CA
+    totaux differents des que le simulateur tourne -- exactement la
+    coherence que get_full_df() est cense garantir partout ailleurs.
+    """
+    new_prod = state["contrats"][state.get("_live_seed_count_prod", 0):]
+    new_sin  = state["sinistres"][state.get("_live_seed_count_sin", 0):]
+    ca_by_month, sin_by_month = {}, {}
+    for r in new_prod:
+        m = r.get("MOIS")
+        if m:
+            ca_by_month[m] = ca_by_month.get(m, 0.0) + float(r.get("PRIME_NETTE", 0) or 0)
+    for r in new_sin:
+        m = r.get("MOIS")
+        if m:
+            sin_by_month[m] = sin_by_month.get(m, 0.0) + float(r.get("REGLEMENTS", 0) or 0)
+    return ca_by_month, sin_by_month
 
 
 def compute_data_drift():
@@ -968,12 +1099,6 @@ def apply_filters(df, agence=None, region=None, branche=None, mois=None):
     return df
 
 
-def scale_ca(value, prod_len):
-    if prod_len == 0:
-        return 0.0
-    return round(float(value) * TOTAL_CONTRATS_REEL / prod_len, 2)
-
-
 def is_unfiltered(agence=None, region=None, branche=None, mois=None):
     agence_empty  = agence  in (None, "all")
     region_empty  = region  in (None, "all")
@@ -983,27 +1108,26 @@ def is_unfiltered(agence=None, region=None, branche=None, mois=None):
 
 
 def tool_portfolio_summary(agence=None, region=None, branche=None):
-    prod, _ = get_df()
+    # v2.5 -- utilise get_full_df() partout (filtre ou non), plus jamais
+    # get_df() (l'ancien echantillon live scale, retire). Remarque
+    # superviseur : soit TOUS les outils comptent les contrats generes en
+    # direct, soit AUCUN -- avant ce fix, le cas non filtre utilisait des
+    # compteurs (ca_total_reel/nb_contrats_reel) incrementes par le
+    # simulateur alors que top_agence/nb_clients venaient deja de get_df(),
+    # un melange incoherent des deux.
+    # v2.6 -- get_full_df() incorpore de nouveau les contrats/sinistres
+    # cosmetiques generes depuis le demarrage (voir get_full_df()), mais
+    # UNIQUEMENT via ce point d'entree unique : tous les outils qui appellent
+    # get_full_df() voient exactement le meme delta live, donc restent
+    # coherents entre eux -- le probleme d'origine n'etait pas que le live
+    # soit compte, mais qu'il le soit differemment selon l'outil.
+    prod, sin = get_full_df()
     prod_f = apply_filters(prod, agence, region, branche)
+    sin_f  = apply_filters(sin, agence, region, branche)
 
-    if is_unfiltered(agence, region, branche):
-        ca = round(state.get("ca_total_reel", 0.0), 2)
-        nb_contrats = state.get("nb_contrats_reel", TOTAL_CONTRATS_REEL)
-        st = round(state.get("sin_total_reel", 0.0), 2)
-    else:
-        ca_sample = prod_f["PRIME_NETTE"].sum() if "PRIME_NETTE" in prod_f.columns else 0
-        ca = scale_ca(ca_sample, len(prod_f))
-        nb_contrats = len(prod_f)
-        # Sinistres filtres calcules sur le portefeuille COMPLET (sin_full_df),
-        # pas l'echantillon temps reel (3k/12k) utilise ailleurs pour le flux
-        # simule -- une agence/branche filtree sur un si petit echantillon
-        # donnerait un total quasi nul la plupart du temps. sin_full_df n'a
-        # pas Region/BRANCHE : apply_filters ignore silencieusement ces deux
-        # filtres sur ce dataframe (colonnes absentes), region/branche restent
-        # donc approximatifs pour ce total precis (agence reste exact).
-        _, sin_full = get_full_df()
-        sin_f_full = apply_filters(sin_full, agence, region, branche)
-        st = round(sin_f_full["REGLEMENTS"].sum(), 2) if "REGLEMENTS" in sin_f_full.columns else 0
+    ca = round(prod_f["PRIME_NETTE"].sum(), 2) if "PRIME_NETTE" in prod_f.columns else 0
+    nb_contrats = len(prod_f)
+    st = round(sin_f["REGLEMENTS"].sum(), 2) if "REGLEMENTS" in sin_f.columns else 0
 
     top_ag = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().idxmax() if len(prod_f) > 0 else "N/A"
     return {
@@ -1026,7 +1150,7 @@ def tool_portfolio_summary(agence=None, region=None, branche=None):
 
 
 def tool_top_agencies(n=5, agence=None, region=None, branche=None):
-    prod, _ = get_df()
+    prod, _ = get_full_df()  # v2.5 -- coherent avec les autres outils, plus jamais get_df()
     prod = apply_filters(prod, agence, region, branche)
     if len(prod) == 0:
         return []
@@ -1221,16 +1345,16 @@ def tool_accidents_forecast():
 # (qui partagent maintenant cette meme liste) n'aient pas besoin d'un
 # fallback separe chacun.
 _SEGMENTS_FALLBACK = [
-    {"segment":"Premium",    "nb_clients":7751,  "ca_moyen":729000, "bm_moyen":2.1,
+    {"segment":"Premium",    "nb_clients":7751,  "ca_moyen":729000, "bm_moyen":2,
      "nb_contrats_moyen":12.3, "ratio_sp_pct":45.0, "risque":"Faible", "color":SEGMENT_COLORS[0],
      "description":"12+ contrats, BM<=3, tres fideles"},
-    {"segment":"Standard",   "nb_clients":11771, "ca_moyen":368000, "bm_moyen":7.0,
+    {"segment":"Standard",   "nb_clients":11771, "ca_moyen":368000, "bm_moyen":7,
      "nb_contrats_moyen":5.8,  "ratio_sp_pct":62.0, "risque":"Modere", "color":SEGMENT_COLORS[1],
      "description":"Primes elevees, BM=7, potentiel upgrade"},
-    {"segment":"Occasionnel","nb_clients":19333, "ca_moyen":190000, "bm_moyen":5.2,
+    {"segment":"Occasionnel","nb_clients":19333, "ca_moyen":190000, "bm_moyen":5,
      "nb_contrats_moyen":2.4,  "ratio_sp_pct":62.0, "risque":"Modere", "color":SEGMENT_COLORS[2],
      "description":"2-3 contrats, potentiel fidelisation"},
-    {"segment":"A Risque",   "nb_clients":33819, "ca_moyen":172000, "bm_moyen":10.8,
+    {"segment":"A Risque",   "nb_clients":33819, "ca_moyen":172000, "bm_moyen":11,
      "nb_contrats_moyen":1.9,  "ratio_sp_pct":80.0, "risque":"Eleve", "color":SEGMENT_COLORS[3],
      "description":"Fort BM, sinistralite elevee -- priorite"},
 ]
@@ -1250,33 +1374,45 @@ def tool_risk_analysis(agence=None, region=None, branche=None):
     explicitement au caller (agent/rapport) que ces deux champs restent
     globaux meme quand un filtre est applique, pour eviter d'afficher un
     chiffre segmente sous un titre qui suggere le contraire.
+
+    BUG CORRIGE : clients_a_risque/part_risque_pct etaient des CONSTANTES
+    codees en dur (33819 / 46.5%), visiblement figees sur un run de
+    clustering anterieur -- le segment "Client a Risque" reel actuel
+    (outputs/segments_clients.csv, voir circulaire_segmentation.md) n'en
+    compte que 13911 (19.1%). Lus maintenant depuis segments_summary (la
+    meme source que tool_segments()), donc toujours coherents avec la
+    segmentation reellement chargee au demarrage.
     """
-    prod, sin = get_df()
+    # v2.5 -- get_full_df() partout, meme raison que tool_portfolio_summary
+    # (coherence : soit tous les outils comptent les contrats/sinistres
+    # generes en direct, soit aucun -- l'ancienne version comptait deja
+    # differemment le cas filtre (echantillon live + extrapolation) du cas
+    # non filtre (compteur global), un melange incoherent en interne).
+    prod, sin = get_full_df()
     prod_f = apply_filters(prod, agence, region, branche)
     sin_f  = apply_filters(sin, agence, None, None)  # sin n'a pas Region/BRANCHE
 
-    if is_unfiltered(agence, region, branche):
-        ca = state.get("ca_total_reel", 0.0) or 1
-        st = sin_f["REGLEMENTS"].sum() if "REGLEMENTS" in sin_f.columns else 0
-    else:
-        ca_sample = prod_f["PRIME_NETTE"].sum() if "PRIME_NETTE" in prod_f.columns else 0
-        ca = scale_ca(ca_sample, len(prod_f)) or 1
-        st = sin_f["REGLEMENTS"].sum() if "REGLEMENTS" in sin_f.columns else 0
+    ca = (prod_f["PRIME_NETTE"].sum() if "PRIME_NETTE" in prod_f.columns else 0) or 1
+    st = sin_f["REGLEMENTS"].sum() if "REGLEMENTS" in sin_f.columns else 0
 
     sous_perf = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().sort_values().head(3).index.tolist() \
                 if "AGENCE" in prod_f.columns and len(prod_f) > 0 else []
 
+    segments = state.get("segments_summary") or _SEGMENTS_FALLBACK
+    seg_risque = next((s for s in segments if "risque" in s["segment"].lower()), None)
+    nb_total_segmente = sum(s["nb_clients"] for s in segments) or 1
+
     return {
         "ratio_sinistralite":  round(st / ca * 100, 2),
-        "clients_a_risque":    33819,
-        "part_risque_pct":     46.5,
+        "clients_a_risque":    seg_risque["nb_clients"] if seg_risque else 0,
+        "part_risque_pct":     round(seg_risque["nb_clients"] / nb_total_segmente * 100, 1) if seg_risque else 0,
         "clients_a_risque_est_global": True,
         "agences_sous_perf":   [str(a) for a in sous_perf],
         "recommandations": [
-            "Reviser la politique tarifaire pour le segment A Risque",
-            "Renforcer les controles sur la branche Taxi",
-            "Campagne de fidelisation pour les Occasionnels",
-            "Programme VIP pour les clients Premium",
+            "Reviser la politique tarifaire pour le segment Client a Risque",
+            "Pedagogie sur le bonus-malus des la souscription pour le segment Client Jeune Conducteur",
+            "Analyser les garanties souscrites par le segment Autres Clients pour comprendre ce qui le distingue",
+            "Programme de fidelisation VIP pour le segment Client Premium",
         ],
     }
 
@@ -1295,8 +1431,9 @@ def tool_risk_clients(n=20, agence=None, region=None, branche=None):
     des noms/identifiants concrets, pas juste un pourcentage agrege.
 
     IMPORTANT : utilise get_full_df() (portefeuille COMPLET charge au
-    demarrage), PAS get_df() (echantillon temps reel 10k/3k utilise par le
-    simulateur pour le dashboard live) -- croiser deux echantillons tires
+    demarrage), PAS state["contrats"]/["sinistres"] (echantillon 10k/3k qui
+    alimente uniquement le fil d'activite cosmetique du dashboard live) --
+    croiser deux echantillons tires
     INDEPENDAMMENT produirait des ratios par client absurdes pour la plupart
     des clients (numerateur et denominateur ne couvrant pas les memes
     contrats/sinistres reels de ce client). Sur le portefeuille complet, le
@@ -1356,8 +1493,9 @@ def tool_risk_clients(n=20, agence=None, region=None, branche=None):
         "seuil_ratio_sp_pct":     RISK_RATIO_THRESHOLD_PCT,
         "note": (
             "Calcule EN DIRECT sur le portefeuille complet -- distinct du chiffre "
-            "clients_a_risque (33819) renvoye par risk_analysis, qui provient de la "
-            "segmentation K-Means globale (05_clustering.py) et n'est jamais recalcule par filtre. "
+            "clients_a_risque renvoye par risk_analysis, qui provient du segment "
+            "'Client a Risque' de la segmentation K-Means (05_clustering.py) et "
+            "n'est jamais recalcule par filtre. "
             f"Clients avec une prime totale < {MIN_CA_FOR_RISK_TND:.0f} TND exclus (denominateur "
             "trop faible pour un ratio S/P representatif)."
         ),
@@ -1365,16 +1503,13 @@ def tool_risk_clients(n=20, agence=None, region=None, branche=None):
 
 
 def tool_sinistres_stats():
-    # Portefeuille COMPLET (get_full_df), pas l'echantillon live get_df() --
-    # ce dernier se fait polluer au fil du temps par le simulateur, qui pioche
-    # ses agences/sinistres synthetiques dans une liste plus large que les 10
-    # agences reelles (voir tool_compare_agencies) ; sur cette page d'analyse
-    # "reelle", ca fausserait aussi bien la moyenne par sinistre que le pic
-    # mensuel.
+    # get_full_df() (portefeuille complet + delta live, voir get_full_df()) --
+    # montant_total/montant_moyen/total_sinistres viennent tous du meme
+    # dataframe pour rester coherents entre eux au fil du temps.
     _, sin = get_full_df()
     return {
         "total_sinistres": len(sin),
-        "montant_total":   round(state.get("sin_total_reel", 0.0), 2),
+        "montant_total":   round(sin["REGLEMENTS"].sum(), 2) if "REGLEMENTS" in sin.columns else 0,
         "montant_moyen":   round(sin["REGLEMENTS"].mean(), 2) if len(sin) > 0 and "REGLEMENTS" in sin.columns else 0,
         "en_cours":        int(len(sin[sin["TRANSACTION"] == "EN COURS"])) if "TRANSACTION" in sin.columns else 0,
         "pic_mois":        int(sin.groupby("MOIS")["REGLEMENTS"].sum().idxmax()) if "MOIS" in sin.columns and len(sin) > 0 else 0,
@@ -1382,7 +1517,7 @@ def tool_sinistres_stats():
 
 
 def tool_branch_analysis():
-    prod, _ = get_df()
+    prod, _ = get_full_df()  # v2.5 -- coherent avec les autres outils, plus jamais get_df()
     ca_total = prod["PRIME_NETTE"].sum()
     by_br    = prod.groupby("BRANCHE")["PRIME_NETTE"].sum().sort_values(ascending=False)
     return [{"branche": str(b), "ca": round(v, 2), "part_pct": round(v / ca_total * 100, 1)}
@@ -1390,8 +1525,9 @@ def tool_branch_analysis():
 
 
 def tool_compare_agencies():
-    # Portefeuille COMPLET (get_full_df), pas l'echantillon live get_df() :
-    # le simulateur pioche ses contrats/sinistres synthetiques dans une liste
+    # Portefeuille COMPLET (get_full_df), pas l'echantillon live
+    # state["contrats"]/["sinistres"] : le simulateur pioche ses
+    # contrats/sinistres synthetiques dans une liste
     # d'agences plus large (tous les gouvernorats) que les 10 agences REELES
     # du portefeuille historique -- sur l'echantillon live, une agence
     # synthetique a tres faible volume peut recevoir par hasard un sinistre
@@ -1423,8 +1559,9 @@ def tool_compare_agencies():
 
 
 def tool_detect_anomalies():
-    # Portefeuille COMPLET (get_full_df), pas l'echantillon live get_df() --
-    # meme raison que tool_compare_agencies()/tool_risk_clients() : sur
+    # Portefeuille COMPLET (get_full_df), pas l'echantillon live
+    # state["contrats"]/["sinistres"] -- meme raison que
+    # tool_compare_agencies()/tool_risk_clients() : sur
     # l'echantillon live (10k/3k lignes), le bruit d'echantillonnage + les
     # denominateurs quasi nuls produisaient des ratios moyens a 5 chiffres
     # (ex. 11 634% observe) sans rapport avec le portefeuille reel.
@@ -1467,7 +1604,7 @@ def tool_detect_anomalies():
 
 
 def tool_profil_clients(agence=None, region=None, branche=None):
-    prod, _ = get_df()
+    prod, _ = get_full_df()  # v2.5 -- coherent avec les autres outils, plus jamais get_df()
     prod = apply_filters(prod, agence, region, branche)
     sexe = prod["SEXE"].value_counts().to_dict()             if "SEXE"        in prod.columns else {}
     csp  = prod["CSP"].value_counts().head(6).to_dict()      if "CSP"         in prod.columns else {}
@@ -1867,24 +2004,19 @@ def status():
 
 @app.get("/api/kpis")
 def kpis(agence: str = "all", region: str = "all", branche: str = "all", mois: int = 0):
-    prod, _ = get_df()
+    # v2.5 -- get_full_df() partout, meme raison que tool_portfolio_summary :
+    # avant ce fix, le cas filtre lisait get_df() (echantillon live, gonfle
+    # par les contrats cosmetiques ajoutes par simulator()) + scale_ca(),
+    # alors que le cas non filtre lisait deja des totaux figes au demarrage --
+    # un melange incoherent. sin_full_df n'a ni Region/BRANCHE ni MOIS : ces
+    # filtres restent approximatifs pour ce total precis (agence reste exact).
+    prod, sin = get_full_df()
     prod_f = apply_filters(prod, agence, region, branche, mois)
+    sin_f  = apply_filters(sin, agence, region, branche)
 
-    if is_unfiltered(agence, region, branche, mois):
-        ca = round(state.get("ca_total_reel", 0.0), 2)
-        nb = state.get("nb_contrats_reel", TOTAL_CONTRATS_REEL)
-        st = round(state.get("sin_total_reel", 0.0), 2)
-    else:
-        ca_sample = prod_f["PRIME_NETTE"].sum() if "PRIME_NETTE" in prod_f.columns else 0
-        ca = scale_ca(ca_sample, len(prod_f))
-        nb = len(prod_f)
-        # Portefeuille COMPLET (sin_full_df), pas l'echantillon 3k/12k --
-        # voir tool_portfolio_summary pour la meme logique. sin_full_df n'a
-        # ni Region/BRANCHE ni MOIS : ces filtres restent approximatifs pour
-        # ce total precis (agence reste exact).
-        _, sin_full = get_full_df()
-        sin_f_full = apply_filters(sin_full, agence, region, branche)
-        st = round(sin_f_full["REGLEMENTS"].sum(), 2) if "REGLEMENTS" in sin_f_full.columns else 0
+    ca = round(prod_f["PRIME_NETTE"].sum(), 2) if "PRIME_NETTE" in prod_f.columns else 0
+    nb = len(prod_f)
+    st = round(sin_f["REGLEMENTS"].sum(), 2) if "REGLEMENTS" in sin_f.columns else 0
 
     top_ag = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().idxmax() if len(prod_f) > 0 else "N/A"
     top_ca = prod_f.groupby("AGENCE")["PRIME_NETTE"].sum().max()    if len(prod_f) > 0 else 0
@@ -1904,7 +2036,7 @@ def kpis(agence: str = "all", region: str = "all", branche: str = "all", mois: i
 
 @app.get("/api/ca-by-agence")
 def ca_by_agence(agence: str = "all", region: str = "all", branche: str = "all", mois: int = 0):
-    prod, _ = get_df()
+    prod, _ = get_full_df()  # v2.5 -- coherent avec les autres outils, plus jamais get_df()
     prod  = apply_filters(prod, agence, region, branche, mois)
     data  = prod.groupby("AGENCE")["PRIME_NETTE"].sum().sort_values(ascending=False)
     total = data.sum()
@@ -1914,7 +2046,7 @@ def ca_by_agence(agence: str = "all", region: str = "all", branche: str = "all",
 
 @app.get("/api/ca-by-branche")
 def ca_by_branche(agence: str = "all", region: str = "all", mois: int = 0):
-    prod, _ = get_df()
+    prod, _ = get_full_df()  # v2.5 -- coherent avec les autres outils, plus jamais get_df()
     prod  = apply_filters(prod, agence, region, None, mois)
     data  = prod.groupby("BRANCHE")["PRIME_NETTE"].sum().sort_values(ascending=False)
     total = data.sum()
@@ -1924,30 +2056,32 @@ def ca_by_branche(agence: str = "all", region: str = "all", mois: int = 0):
 
 @app.get("/api/ca-by-month")
 def ca_by_month(agence: str = "all", region: str = "all", branche: str = "all"):
-    prod, _ = get_df()
-    prod = apply_filters(prod, agence, region, branche)
-
     if is_unfiltered(agence, region, branche):
         by_month_reel  = state.get("ca_by_month_reel", {})
         total_reel     = state.get("ca_total_reel", 0.0)
         sin_by_month   = state.get("sin_by_month_reel", {})
+        live_ca_month, live_sin_month = _live_month_sums()
         return [{"mois": MOIS_LABELS[m-1], "mois_num": m,
-                 "primes":    round(float(by_month_reel.get(m, total_reel/12)), 2),
-                 "sinistres": round(float(sin_by_month.get(m, 0)), 2)}
+                 "primes":    round(float(by_month_reel.get(m, total_reel/12)) + live_ca_month.get(m, 0.0), 2),
+                 "sinistres": round(float(sin_by_month.get(m, 0)) + live_sin_month.get(m, 0.0), 2)}
                 for m in range(1, 13)]
 
-    # Sinistres filtres : portefeuille COMPLET (sin_full_df, inclut MOIS
-    # depuis seed_data), pas l'echantillon 3k -- meme principe que
-    # tool_portfolio_summary/api/kpis. Region/BRANCHE non disponibles sur
-    # sin_full_df, ignores silencieusement par apply_filters pour ce total.
-    _, sin_full = get_full_df()
+    # v2.5 -- prod ET sin viennent maintenant tous deux de get_full_df()
+    # (portefeuille complet), plus jamais get_df() (echantillon live) ni le
+    # facteur d'echelle sf qui compensait sa taille reduite -- meme principe
+    # que tool_portfolio_summary/api/kpis. prod_full_df n'a pas de colonne
+    # MOIS (contrairement a l'echantillon simule) : ce total agrege par mois
+    # reste donc approximatif quand un filtre agence/region/branche est
+    # applique (voir ca_by_month_reel ci-dessus pour le cas non filtre, qui
+    # lui est exact).
+    prod_full, sin_full = get_full_df()
+    prod_full_f = apply_filters(prod_full, agence, region, branche)
     sin_full_f  = apply_filters(sin_full, agence, region, branche)
     sin_m = sin_full_f.groupby("MOIS")["REGLEMENTS"].sum() if "MOIS" in sin_full_f.columns else pd.Series()
 
-    sf = TOTAL_CONTRATS_REEL / max(len(prod), 1)
-    prime_m = prod.groupby("MOIS")["PRIME_NETTE"].sum() if "MOIS" in prod.columns else pd.Series()
+    total_ca_f = prod_full_f["PRIME_NETTE"].sum() if "PRIME_NETTE" in prod_full_f.columns else 0
     return [{"mois": MOIS_LABELS[m-1], "mois_num": m,
-             "primes":    round(float(prime_m.get(m, 0)) * sf, 2),
+             "primes":    round(float(total_ca_f) / 12, 2),
              "sinistres": round(float(sin_m.get(m, 0)), 2)}
             for m in range(1, 13)]
 
@@ -2028,7 +2162,7 @@ def segments_endpoint():
 
 @app.get("/api/filters")
 def filters_endpoint():
-    prod, _ = get_df()
+    prod, _ = get_full_df()  # v2.5 -- coherent avec les autres outils, plus jamais get_df()
 
     if "AGENCE" in prod.columns:
         raw_agences = prod["AGENCE"].dropna().unique().tolist()

@@ -45,23 +45,38 @@ def load_data():
     if df_sini is not None and 'DATE_ACCIDENT' in df_sini.columns:
         df_sini['DATE_ACCIDENT'] = pd.to_datetime(df_sini['DATE_ACCIDENT'], errors='coerce')
 
-    # Ajustement dynamique de l'année historique cible (2025)
-    target_year = 2025
-    df_prod_filtered = df_prod[df_prod['DEBUT_PERI'].dt.year == target_year].copy()
-    
-    if len(df_prod_filtered) == 0:
-        available_years = df_prod['DEBUT_PERI'].dt.year.dropna().unique()
-        print(f"⚠️  Aucune donnée trouvée pour l'année {target_year}.")
-        print(f"👉 Années disponibles dans vos données nettoyées : {sorted(list(available_years))}")
-        if len(available_years) > 0:
-            target_year = int(max(available_years))
-            df_prod_filtered = df_prod[df_prod['DEBUT_PERI'].dt.year == target_year].copy()
-            print(f"🔄 Redirection automatique vers l'année la plus récente disponible : {target_year}")
-        else:
-            print("❌ Erreur critique : Aucune date valide trouvée dans la colonne DEBUT_PERI.")
-            return None, None
+    # CORRIGE (meme constat que 04_forecasting.py, remarque 2 superviseur) :
+    # un filtre par ANNEE CALENDAIRE fixe ("target_year = 2025") ne correspond
+    # plus a rien depuis le decalage de dates DYNAMIQUE de 02_cleaning.py --
+    # la periode dense de ~12 mois de donnees s'etale desormais sur DEUX
+    # annees calendaires (ex: aout 2025 a juillet 2026), donc filtrer sur
+    # UNE SEULE annee ne recuperait qu'une partie de la periode dense et
+    # laissait passer la longue traine eparse (0.05% du volume, artefact
+    # d'export) qui la precede -- observe concretement : plot 3 (evolution
+    # mensuelle) montrait un CA quasi nul de janvier a juillet puis un saut
+    # brutal en aout, un artefact de donnees et non une tendance reelle.
+    # Meme detection DONNEES-DRIVEE que 04_forecasting.py : on isole les
+    # semaines a volume de transactions substantiel, sans presupposer
+    # quelle(s) annee(s) calendaire(s) elles couvrent.
+    weekly_counts = df_prod.groupby(df_prod['DEBUT_PERI'].dt.to_period('W')).size()
+    dense_weeks = weekly_counts[weekly_counts > 100].index
+    df_prod_filtered = df_prod[df_prod['DEBUT_PERI'].dt.to_period('W').isin(dense_weeks)].copy()
 
-    print(f"✅ Données chargées : {len(df_prod_filtered):,} contrats (Exercice {target_year})")
+    if len(df_prod_filtered) == 0:
+        print("❌ Erreur critique : aucune semaine a volume substantiel trouvee dans DEBUT_PERI.")
+        return None, None
+
+    period_start = df_prod_filtered['DEBUT_PERI'].min()
+    period_end   = df_prod_filtered['DEBUT_PERI'].max()
+    print(f"✅ Données chargées : {len(df_prod_filtered):,} contrats "
+          f"(période dense {period_start:%Y-%m} à {period_end:%Y-%m})")
+
+    # Sinistres alignes sur la MEME plage de dates que la periode dense
+    # ci-dessus (pas une egalite sur une seule annee calendaire, pour la
+    # meme raison) -- necessaire pour plot_sinistres_vs_primes.
+    if df_sini is not None and 'DATE_ACCIDENT' in df_sini.columns:
+        df_sini = df_sini[df_sini['DATE_ACCIDENT'].between(period_start, period_end)].copy()
+
     return df_prod_filtered, df_sini
 
 
@@ -71,6 +86,9 @@ def load_data():
 def plot_top_agences(df):
     col = 'AGENCE'
     top = df.groupby(col)['PRIME_NETTE'].sum().sort_values(ascending=True).tail(10)
+    # Periode dynamique (voir load_data()) plutot qu'une annee fixe "2025" --
+    # la periode dense peut s'etaler sur 2 annees calendaires.
+    period_label = f"{df['DEBUT_PERI'].min():%b %Y} – {df['DEBUT_PERI'].max():%b %Y}"
 
     fig, ax = plt.subplots(figsize=(13, 7))
     bars = ax.barh(top.index, top.values, color=PASTEL_BLUE, edgecolor='white')
@@ -80,10 +98,13 @@ def plot_top_agences(df):
                 bar.get_y() + bar.get_height() / 2,
                 f'{val/1e6:.2f}M TND', va='center', fontsize=11, color='#444')
 
-    ax.set_title("Top 10 des Agences — Chiffre d'Affaires 2025",
+    ax.set_title(f"Top 10 des Agences — Chiffre d'Affaires ({period_label})",
                  fontsize=15, fontweight='bold', pad=15)
     ax.set_xlabel('Revenus (TND)', fontsize=12)
-    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x/1e6:.0f}M'))
+    # CORRIGE : ':.0f' arrondissait tous les ticks a "0M" (valeurs toutes
+    # sous 0.5M TND) -- axe illisible malgre des etiquettes par barre
+    # correctes en ':.2f'. Alignee sur la meme precision.
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x/1e6:.2f}M'))
     ax.set_xlim(0, top.values.max() * 1.15)
     plt.tight_layout()
     plt.savefig(os.path.join(PLOTS_DIR, '01_top_agences_ca.png'), dpi=150)
@@ -127,6 +148,10 @@ def plot_evolution_mensuelle(df):
     df = df.copy()
     df['Annee_Mois'] = df['DEBUT_PERI'].dt.to_period('M').astype(str)
     evolution = df.groupby('Annee_Mois')['PRIME_NETTE'].sum().sort_index()
+    # Meme exclusion que 04_forecasting.py : le mois a la frontiere de la
+    # periode dense est partiel (coupure semaine/mois), pas comparable a un
+    # mois complet -- sans ca il apparait a tort comme un quasi-zero.
+    evolution = evolution[evolution > 1e6]
 
     fig, ax = plt.subplots(figsize=(14, 6))
     ax.fill_between(range(len(evolution)), evolution.values, alpha=0.3, color=PASTEL_PURPLE)
@@ -141,8 +166,11 @@ def plot_evolution_mensuelle(df):
 
     ax.set_xticks(range(len(evolution)))
     ax.set_xticklabels(evolution.index, rotation=45, ha='right', fontsize=10)
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x/1e6:.0f}M TND'))
-    ax.set_title("Évolution du Chiffre d'Affaires Mensuel — 2025",
+    # CORRIGE (meme bug que plot 1) : ':.0f' arrondissait tous les ticks a
+    # "1M TND" (valeurs toutes entre 1.0M et 1.5M).
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x/1e6:.1f}M TND'))
+    period_label = f"{df['DEBUT_PERI'].min():%b %Y} – {df['DEBUT_PERI'].max():%b %Y}"
+    ax.set_title(f"Évolution du Chiffre d'Affaires Mensuel ({period_label})",
                  fontsize=15, fontweight='bold', pad=15)
     ax.set_ylabel('Primes Nettes (TND)')
     plt.tight_layout()
@@ -163,11 +191,10 @@ def plot_sinistres_vs_primes(df_prod, df_sini):
     df_sini = df_sini.copy()
 
     df_prod['Mois'] = df_prod['DEBUT_PERI'].dt.to_period('M').astype(str)
+    # df_sini est deja aligne sur la meme plage de dates que df_prod par
+    # load_data() -- ne pas re-filtrer sur une seule annee calendaire ici
+    # (l'ancien filtre perdait la moitie de la periode dense, voir load_data()).
     df_sini['DATE_ACCIDENT'] = pd.to_datetime(df_sini['DATE_ACCIDENT'], errors='coerce')
-    
-    analyzed_year = df_prod['DEBUT_PERI'].dt.year.dropna().iloc[0]
-    
-    df_sini = df_sini[df_sini['DATE_ACCIDENT'].dt.year == analyzed_year]
     df_sini['Mois'] = df_sini['DATE_ACCIDENT'].dt.to_period('M').astype(str)
 
     primes    = df_prod.groupby('Mois')['PRIME_NETTE'].sum()
@@ -191,11 +218,14 @@ def plot_sinistres_vs_primes(df_prod, df_sini):
 
     ax.set_xticks(list(x))
     ax.set_xticklabels(combined.index, rotation=45)
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x/1e6:.0f}M'))
+    # CORRIGE (meme bug que plots 1 et 3) : ':.0f' arrondissait tous les
+    # ticks a "1M"/"0M" (Sinistres ~0.3-1.4M, Primes ~1.0-1.5M).
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'{x/1e6:.1f}M'))
+    ax.set_ylim(0, combined.max().max() * 1.18)
     ax.set_title('Primes Collectées vs Sinistres Réglés par Mois (+ Ratio S/P)',
                  fontsize=14, fontweight='bold', pad=15)
     ax.set_ylabel('Montant (TND)')
-    ax.legend()
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.42), ncol=2, frameon=False)
     plt.tight_layout()
     plt.savefig(os.path.join(PLOTS_DIR, '04_sinistres_vs_primes.png'), dpi=150)
     plt.close()
@@ -233,13 +263,18 @@ def plot_distribution_primes(df):
 def plot_profil_client(df):
     df = df.copy()
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    fig.suptitle('Profil des Assurés MAE — 2025', fontsize=16, fontweight='bold')
+    period_label = f"{df['DEBUT_PERI'].min():%b %Y} – {df['DEBUT_PERI'].max():%b %Y}"
+    fig.suptitle(f'Profil des Assurés MAE ({period_label})', fontsize=16, fontweight='bold')
 
     # --- Âge ---
     if 'DT_NAISS' in df.columns:
         df['DT_NAISS'] = pd.to_datetime(df['DT_NAISS'], errors='coerce')
-        analyzed_year = df['DEBUT_PERI'].dt.year.dropna().iloc[0]
-        df['AGE'] = analyzed_year - df['DT_NAISS'].dt.year
+        # Age a la date de CE contrat, pas a une annee de reference unique
+        # (l'ancien code prenait l'annee de la 1ere ligne du fichier, un
+        # choix arbitraire qui biaisait l'age de tout contrat souscrit une
+        # autre annee -- desormais significatif puisque la periode dense
+        # couvre 2 annees calendaires, voir load_data()).
+        df['AGE'] = df['DEBUT_PERI'].dt.year - df['DT_NAISS'].dt.year
         age_data = df['AGE'][(df['AGE'] >= 18) & (df['AGE'] <= 80)]
         axes[0].hist(age_data, bins=30, color=PASTEL_BLUE, edgecolor='white')
         axes[0].set_title('Distribution des Âges')

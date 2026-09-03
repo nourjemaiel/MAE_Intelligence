@@ -289,7 +289,7 @@ def build_cluster_name_map(client_df, k):
     # individuelles extremes.
     client_df = client_df.copy()
     agg_cols = ['CA_TOTAL', 'NB_CONTRATS', 'PRIME_MOYENNE', 'BONUS_MALUS_MOY',
-                'DUREE_MOY', 'SEXE_NUM', 'TOTAL_REGLEMENTS']
+                'DUREE_MOY', 'SEXE_NUM', 'TOTAL_REGLEMENTS', 'AGE']
     if 'CAPITAUX_MOY' in client_df.columns:
         agg_cols.append('CAPITAUX_MOY')
     sums  = client_df.groupby('CLUSTER')[['CA_TOTAL', 'TOTAL_REGLEMENTS']].sum()
@@ -311,12 +311,29 @@ def build_cluster_name_map(client_df, k):
         return series.sort_values(ascending=False).index.tolist()
 
     candidates = [
-        ('Client a Risque',      ranked(stats['LOSS_RATIO'])),                    # ratio sinistres/primes agrege le plus eleve
-        ('Client Premium',       ranked(z['CA_TOTAL'])),                          # CA le plus eleve
-        ('Client Grand Contrat', ranked(z['PRIME_MOYENNE'] - z['NB_CONTRATS'])),  # peu de contrats, mais tres chers
-        ('Client Capital Eleve', ranked(z['CAPITAUX_MOY'])) if 'CAPITAUX_MOY' in stats.columns else (None, []),
-        ('Clientele Feminine',   ranked(-z['SEXE_NUM'])),                        # SEXE_NUM=0 code F -- ecart le plus extreme vers F
-        ('Client Fidele',        ranked(z['DUREE_MOY'])),                        # duree de contrat la plus longue
+        ('Client a Risque',       ranked(stats['LOSS_RATIO'])),                    # ratio sinistres/primes agrege le plus eleve
+        ('Client Premium',        ranked(z['CA_TOTAL'])),                          # CA le plus eleve
+        ('Client Grand Contrat',  ranked(z['PRIME_MOYENNE'] - z['NB_CONTRATS'])),  # peu de contrats, mais tres chers
+        ('Client Capital Eleve',  ranked(z['CAPITAUX_MOY'])) if 'CAPITAUX_MOY' in stats.columns else (None, []),
+        # Age moyen le plus bas de loin (z=-1.85, l'ecart le plus extreme de
+        # toute la table, contre z=1.71 pour son propre bonus-malus) --
+        # coherent avec un bonus-malus eleve (les jeunes/nouveaux conducteurs
+        # demarrent haut sur l'echelle bonus-malus) et une duree de contrat
+        # courte (recemment souscrits, pas encore eu le temps de la reduire) :
+        # les 3 signaux racontent la meme histoire, contrairement a l'ancienne
+        # tentative "Client Fidele" (bonus-malus haut + duree courte SANS
+        # l'age, une contradiction non resolue -- voir git history).
+        ('Client Jeune Conducteur', ranked(-z['AGE'])),
+        # Aucun axe FINANCIER ne distingue ce dernier cluster (toutes les
+        # variables de CA/prime/sinistres sont proches de 0 en z-score,
+        # quasi indiscernable de Client Economique) -- seul le genre
+        # (SEXE_NUM, 94,3% F) le separe reellement des autres. Nomme "Autres
+        # Clients" plutot que sur cet axe demographique (qui laisserait
+        # croire, a tort, que les autres segments n'ont pas de clientes) --
+        # mais le critere d'ASSIGNATION reste bien SEXE_NUM, la seule
+        # variable qui isole reellement ce groupe. Explication complete dans
+        # circulaire_segmentation.md.
+        ('Autres Clients',       ranked(-z['SEXE_NUM'])),  # SEXE_NUM bas = majorite F (H/M=1, F=0)
         ('Client Economique',    ranked(z['n'] - z['DUREE_MOY'])),               # segment le plus gros, le plus court en duree
     ]
 
@@ -548,7 +565,7 @@ def print_summary(client_df, k, name_map):
         print(f"   Clients     : {int(row['NB_CLIENTS']):,}")
         print(f"   CA Moyen    : {row['CA_MOYEN']/1e3:.1f}K TND")
         print(f"   Âge Moyen   : {row['AGE_MOY']:.0f} ans")
-        print(f"   Bonus-Malus : {row['BONUS_MOY']:.1f}")
+        print(f"   Bonus-Malus : {row['BONUS_MOY']:.0f}")
         print(f"   Nb Contrats : {row['NB_CONTRATS']:.1f}")
 
     return summary

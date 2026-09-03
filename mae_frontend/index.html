@@ -44,6 +44,11 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .login-input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--r);
   font-size:14px;font-family:inherit;color:var(--text);background:var(--bg);transition:.15s}
 .login-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim);background:#fff}
+.login-input-wrap{position:relative}
+.login-input-wrap .login-input{padding-right:40px}
+.login-pw-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;
+  cursor:pointer;padding:4px;display:flex;align-items:center;color:var(--muted);border-radius:6px}
+.login-pw-toggle:hover{color:var(--text2)}
 .login-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);
   font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;transition:.15s;margin-top:8px;letter-spacing:.3px}
 .login-btn:hover{background:var(--accent-light);transform:translateY(-1px);box-shadow:0 4px 12px rgba(26,122,58,0.3)}
@@ -103,6 +108,8 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .filter-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
 .filters-reset{background:none;border:1px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:var(--r);cursor:pointer;font-size:12px;font-family:inherit;transition:.15s;font-weight:500}
 .filters-reset:hover{border-color:var(--danger);color:var(--danger);background:#fff5f5}
+.filters-bar-compact{background:none;border-bottom:none;box-shadow:none;padding:0;margin-bottom:4px}
+.filters-bar-compact .filter-select{min-width:0;font-size:11px;padding:5px 26px 5px 10px}
 
 /* PAGE */
 .ph{margin-bottom:24px}
@@ -187,6 +194,11 @@ html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'
 .dots span:nth-child(3){animation-delay:.4s}
 @keyframes dotBounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
 .msg-error{align-self:flex-start;background:#fff8f0;border:1px solid #fcd34d;padding:12px 14px;border-radius:3px 16px 16px 16px;max-width:85%;font-size:13px;line-height:1.75;color:#92400e}
+.msg-table-wrap{overflow-x:auto;margin:8px 0}
+.msg-table{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+.msg-table th,.msg-table td{border:1px solid var(--border);padding:6px 10px;text-align:left;white-space:nowrap}
+.msg-table th{background:var(--accent-dim);color:var(--accent);font-weight:600}
+.msg-table tbody tr:nth-child(even){background:var(--bg)}
 .report-btn{display:inline-flex;align-items:center;padding:7px 14px;border-radius:var(--r);font-size:12px;font-weight:600;font-family:inherit;text-decoration:none;cursor:pointer;transition:.15s;background:var(--bg);border:1px solid var(--border);color:var(--text)}
 .report-btn:hover{border-color:var(--accent3);color:var(--accent)}
 .report-btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -282,6 +294,49 @@ function withAuthParam(url) {
   return url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
 }
 
+// L'agent redige regulierement des tableaux markdown (| col | col |) pour les
+// comparaisons multi-lignes (segments, agences, clients a risque) -- le rendu
+// du chat n'appliquait avant que **gras**/retours a la ligne, donc un tableau
+// markdown s'affichait tel quel, pipes et tirets bruts inclus (remarque
+// utilisateur : "pas visuellement agreable"). Detecte les blocs "| ... |"
+// suivis d'une ligne separatrice ("|---|---|") et les convertit en vraies
+// tables HTML ; le reste du texte repasse par le pipeline existant.
+const MD_TABLE_SEPARATOR_RE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
+function splitTableCells(line) {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map(c => c.trim());
+}
+function renderMarkdownTables(text) {
+  const lines = text.split("\n");
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const next = lines[i + 1];
+    if (line.trim().startsWith("|") && next && MD_TABLE_SEPARATOR_RE.test(next)) {
+      const headerCells = splitTableCells(line);
+      let j = i + 2;
+      const rows = [];
+      while (j < lines.length && lines[j].trim().startsWith("|")) {
+        rows.push(splitTableCells(lines[j]));
+        j++;
+      }
+      const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      const boldInline = s => esc(s).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+      const thead = "<tr>" + headerCells.map(c => `<th>${boldInline(c)}</th>`).join("") + "</tr>";
+      const tbody = rows.map(r => "<tr>" + r.map(c => `<td>${boldInline(c)}</td>`).join("") + "</tr>").join("");
+      out.push(`<div class="msg-table-wrap"><table class="msg-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>`);
+      i = j;
+    } else {
+      out.push(line);
+      i++;
+    }
+  }
+  return out.join("\n");
+}
+
 // Session helpers kept for logout, but we no longer auto-restore on mount
 function clearSession(){ localStorage.removeItem("mae_session"); }
 
@@ -307,10 +362,17 @@ function saveUserConversations(username, convs) {
 
 const TT = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
+  // "Intervalle de confiance" est une AIRE empilee dont la valeur est une
+  // largeur brute en TND (ci_high - ci_low), pas un chiffre interpretable
+  // isolement -- deja represente visuellement par la bande ombree du
+  // graphique. Exclu du tooltip plutot que d'afficher un nombre confus
+  // (remarque utilisateur : "152762,06" sans unite claire n'a pas de sens).
+  const visible = payload.filter(p => p.name !== "Intervalle de confiance" && p.name !== "Borne basse");
+  if (!visible.length) return null;
   return (
     <div style={{background:"#fff",border:"1px solid #d4e8d4",borderRadius:8,padding:"10px 14px",fontSize:12,boxShadow:"0 4px 12px rgba(26,122,58,0.12)"}}>
       <p style={{color:"#6b8f6b",marginBottom:6,fontWeight:600}}>{label}</p>
-      {payload.map((p,i)=>(
+      {visible.map((p,i)=>(
         <p key={i} style={{color:p.color||"#1a7a3a",margin:"2px 0"}}>
           {p.name}: <strong>{typeof p.value==="number"?p.value.toLocaleString("fr-TN"):p.value}</strong>
         </p>
@@ -344,6 +406,7 @@ function LoginPage({ onLogin }) {
   const [password, setPassword] = useState("");
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const [showPw, setShowPw]     = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -384,8 +447,26 @@ function LoginPage({ onLogin }) {
           </div>
           <div className="login-field">
             <label className="login-label">Mot de passe</label>
-            <input className="login-input" type="password" placeholder="••••••••"
-              value={password} onChange={e=>setPassword(e.target.value)} required/>
+            <div className="login-input-wrap">
+              <input className="login-input" type={showPw?"text":"password"} placeholder="••••••••"
+                value={password} onChange={e=>setPassword(e.target.value)} required/>
+              <button type="button" className="login-pw-toggle"
+                onClick={()=>setShowPw(v=>!v)}
+                aria-label={showPw?"Masquer le mot de passe":"Afficher le mot de passe"}
+                title={showPw?"Masquer le mot de passe":"Afficher le mot de passe"}>
+                {showPw ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
           <button className="login-btn" type="submit" disabled={loading}>
             {loading ? "Connexion..." : "Se connecter →"}
@@ -528,9 +609,9 @@ function labelRegion(code, regionLabels) {
   return lbl ? `${lbl} (${code})` : String(code);
 }
 
-function Filters({ filters, values, onChange, onReset }) {
+function Filters({ filters, values, onChange, onReset, hideMois, compact }) {
   return (
-    <div className="filters-bar">
+    <div className={compact?"filters-bar filters-bar-compact":"filters-bar"}>
       <span className="filter-label">Filtres :</span>
 
       {/* Agences — déjà dédupliquées côté backend */}
@@ -560,13 +641,16 @@ function Filters({ filters, values, onChange, onReset }) {
         ))}
       </select>
 
-      {/* Mois */}
-      <select className="filter-select" value={values.mois} onChange={e=>onChange("mois",+e.target.value)}>
-        <option value={0}>Tous les mois</option>
-        {["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"].map((m,i)=>(
-          <option key={i+1} value={i+1}>{m}</option>
-        ))}
-      </select>
+      {/* Mois — pas d'equivalent quand hideMois (ex: clients a risque,
+          calcule en direct, non filtrable par periode cote backend) */}
+      {!hideMois && (
+        <select className="filter-select" value={values.mois} onChange={e=>onChange("mois",+e.target.value)}>
+          <option value={0}>Tous les mois</option>
+          {["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"].map((m,i)=>(
+            <option key={i+1} value={i+1}>{m}</option>
+          ))}
+        </select>
+      )}
 
       <button className="filters-reset" onClick={onReset}>Réinitialiser</button>
     </div>
@@ -631,12 +715,12 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
   useEffect(()=>{fetchAll();const t=setInterval(fetchAll,5000);return()=>clearInterval(t);},[fetchAll]);
 
   const kpiList=kpis?[
-    {label:"Chiffre d'Affaires",val:fmtTND(kpis.ca_total),delta:kpis.nb_contrats?`${fmtTND(kpis.ca_total/kpis.nb_contrats)} / contrat`:"—",c1:"#1a7a3a",c2:"#4cba6a"},
+    {label:"Chiffre d'Affaires",val:fmtTND(kpis.ca_total),delta:"",c1:"#1a7a3a",c2:"#4cba6a"},
     {label:"Clients Actifs",val:String(kpis.nb_clients||0),delta:`${kpis.nb_contrats||0} contrats`,c1:"#2563eb",c2:"#60a5fa"},
     {label:"Sinistres",val:fmtTND(kpis.sin_total),delta:`Ratio: ${(kpis.ratio_sin||0).toFixed(1)}%`,c1:"#d93025",c2:"#f59e0b"},
     {label:"Marge Technique",val:fmtTND(kpis.marge_technique_brute||0),delta:"Brute, avant frais",c1:"#156b32",c2:"#1a7a3a"},
     {label:"Top Agence",val:String(kpis.top_agence||"—").split(" ").slice(0,2).join(" "),delta:fmtTND(kpis.top_agence_ca||0),c1:"#f59e0b",c2:"#1a7a3a"},
-    {label:"Générés (live)",val:(kpis.total_generated||0).toLocaleString(),delta:"Toutes les 5s",c1:"#2ea84f",c2:"#4cba6a"},
+    {label:"Générés (live)",val:String(kpis.total_generated||0),delta:"Toutes les 5s",c1:"#2ea84f",c2:"#4cba6a"},
   ]:[];
 
   const ageData=Object.entries(pData.age_bins||{}).map(([n,v])=>({name:n,value:v}));
@@ -657,7 +741,7 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
             <div className="kpi-label">{k.label}</div>
             <div className="kpi-val">{k.val}</div>
             <div className="kpi-delta">{k.delta}</div>
-            {i===4&&isNew&&<div className="kpi-new">+1 LIVE</div>}
+            {i===5&&isNew&&<div className="kpi-new">+1 LIVE</div>}
           </div>
         ))}
       </div>
@@ -772,6 +856,8 @@ function Dashboard({ filterVals, onFiltersLoaded }) {
 // ═══════════════════════════════════════════════════════════════
 // FORECAST
 // ═══════════════════════════════════════════════════════════════
+const MOIS_ABBR_TO_FULL = {Jan:"Janvier",Fev:"Février",Mar:"Mars",Avr:"Avril",Mai:"Mai",Jun:"Juin",Jul:"Juillet",Aou:"Août",Sep:"Septembre",Oct:"Octobre",Nov:"Novembre",Dec:"Décembre"};
+
 function Forecast() {
   const [data,setData]=useState([]);
   useEffect(()=>{apiFetch(`${API}/forecast`).then(r=>r.json()).then(setData).catch(()=>{});},[]);
@@ -780,27 +866,33 @@ function Forecast() {
   // Croissance calculee cote client a partir des memes 12 mois reels/prevus
   // renvoyes par /api/forecast, pas un pourcentage fixe affiche en dur.
   const growthPct = totalReel>0 ? Math.round((totalPrev/totalReel-1)*1000)/10 : null;
-  const maxMois=data.reduce((b,r)=>r.ca_prev>b.ca_prev?r:b,{ca_prev:0}).mois||"—";
-  const minMois=data.reduce((b,r)=>r.ca_prev<b.ca_prev?r:b,{ca_prev:Infinity}).mois||"—";
+  const maxRow=data.reduce((b,r)=>r.ca_prev>b.ca_prev?r:b,{ca_prev:0,mois:null});
+  const minRow=data.reduce((b,r)=>r.ca_prev<b.ca_prev?r:b,{ca_prev:Infinity,mois:null});
+  const maxMois=maxRow.mois?(MOIS_ABBR_TO_FULL[maxRow.mois]||maxRow.mois):"—";
+  const minMois=minRow.mois?(MOIS_ABBR_TO_FULL[minRow.mois]||minRow.mois):"—";
   // Intervalle de confiance DYNAMIQUE (s'élargit avec l'horizon, voir ci_width_for_month
   // côté backend) — dérivé des bornes réellement renvoyées par /api/forecast plutôt que
   // d'un ±7% fixe qui ne refléterait plus le calcul cote serveur.
   const ciPct = r => (r && r.ca_prev>0) ? Math.round(((r.ci_high-r.ca_prev)/r.ca_prev)*1000)/10 : null;
   const ciFirst = data.length ? ciPct(data[0]) : null;
   const ciLast  = data.length ? ciPct(data[data.length-1]) : null;
+  // Horizon reel (ex: Septembre -> Aout), jamais fige a "Jan -> Dec" -- le
+  // premier mois prevu depend de la date d'execution (voir /api/forecast).
+  const moisFirstFull = data.length ? (MOIS_ABBR_TO_FULL[data[0].mois]||data[0].mois) : null;
+  const moisLastFull  = data.length ? (MOIS_ABBR_TO_FULL[data[data.length-1].mois]||data[data.length-1].mois) : null;
 
   return (
     <div className="page">
       <div className="ph">
         <div className="ph-title">Prévisions — 12 prochains mois</div>
-        <div className="ph-sub">Modèle Prophet · Croissance prévue {growthPct!=null?`${growthPct>=0?"+":""}${growthPct}%`:"—"}</div>
+        <div className="ph-sub">Croissance prévue {growthPct!=null?`${growthPct>=0?"+":""}${growthPct}%`:"—"}</div>
       </div>
       <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
         {[
           {label:"CA Total Prévu", val:fmtTND(totalPrev),   delta:growthPct!=null?`vs 12 mois précédents: ${growthPct>=0?"+":""}${growthPct}%`:"—"},
           {label:"Mois le + fort",      val:maxMois,              delta:"Pic saisonnier"},
           {label:"Mois le + faible",    val:minMois,              delta:"Creux saisonnier"},
-          {label:"Intervalle confiance",val:"95%",                delta:(ciFirst!=null&&ciLast!=null)?`±${ciFirst}% (Jan) → ±${ciLast}% (Déc)`:"—"},
+          {label:"Intervalle confiance",val:"95%",                delta:(ciFirst!=null&&ciLast!=null&&moisFirstFull&&moisLastFull)?`±${ciFirst}% (${moisFirstFull}) → ±${ciLast}% (${moisLastFull})`:"—"},
         ].map((k,i)=>(
           <div key={i} className="kpi">
             <div className="kpi-label">{k.label}</div>
@@ -811,7 +903,7 @@ function Forecast() {
       </div>
       <div className="chart-card" style={{marginBottom:16}}>
         <div className="chart-title">Prévision CA mensuelle — Intervalle de Confiance 95%</div>
-        <div className="chart-sub">Modèle Prophet — données réelles vs prévisions (12 prochains mois)</div>
+        <div className="chart-sub">Données réelles vs prévisions (12 prochains mois)</div>
         <div style={{height:380}}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{left:10,right:20,top:10,bottom:0}}>
@@ -857,9 +949,9 @@ function Segmentation() {
     "Grand Contrat":{reco:"Peu de contrats mais à forte prime unitaire — soigner la relation individuelle plutôt que le volume. Proposer un point de contact dédié au renouvellement pour sécuriser ce contrat à forte valeur.", actions:["Suivi individualisé","Renouvellement prioritaire"]},
     "Capital Eleve":{reco:"Capital assuré nettement supérieur à la moyenne — vérifier que la tarification reflète bien l'exposition réelle. Prioriser ce segment pour une revue de couverture.", actions:["Revue de couverture","Vérification tarifaire"]},
     "Economique": {reco:"Segment le plus large, prime et durée de contrat les plus faibles — fort potentiel de volume. Digitaliser le parcours pour réduire le coût d'acquisition et de gestion.", actions:["Digitalisation","Offres packagées"]},
-    "Feminine":   {reco:"Segment démographiquement distinct — analyser les garanties les plus souscrites pour adapter la communication et l'offre.", actions:["Analyse des garanties souscrites"]},
-    "Fidele":     {reco:"Durée de contrat la plus longue du portefeuille — base de clientèle stable. Maintenir la relation avec un programme de reconnaissance de fidélité.", actions:["Programme de fidélité","Renouvellement facilité"]},
     "Risque":     {reco:"Ratio sinistres/primes le plus élevé du portefeuille. Réviser la politique tarifaire, renforcer les contrôles de souscription et mettre en place une prévention ciblée des sinistres.", actions:["Révision tarifaire","Contrôle souscription","Prévention sinistres"]},
+    "Jeune Conducteur": {reco:"Segment le plus jeune (46 ans en moyenne) et le plus récemment assuré — bonus-malus le plus élevé du portefeuille, cohérent avec des conducteurs jeunes qui n'ont pas encore eu le temps de le faire baisser. Accompagner et fidéliser pour capter la baisse du bonus-malus avec l'ancienneté.", actions:["Offres fidélisation jeunes","Pédagogie bonus-malus"]},
+    "Autres Clients":   {reco:"Financièrement quasi indiscernable du segment Économique — la vraie différence (94,3% de clientes femmes) n'apparaît pas dans le CA ou le risque. Analyser les garanties/options souscrites par ce segment pour comprendre ce qui motive réellement cette séparation.", actions:["Analyse des garanties souscrites","Communication ciblée"]},
   };
   const DEFAULT_SEG_CFG = {reco:"Segment identifié par le clustering sans profil-type prédéfini — analyser son profil (CA, bonus-malus, contrats) pour une stratégie dédiée.", actions:["Analyse du profil"]};
   const getCfg = (name) => {
@@ -873,7 +965,7 @@ function Segmentation() {
     <div className="page">
       <div className="ph">
         <div className="ph-title">Segmentation Clients</div>
-        <div className="ph-sub">K-Means Clustering + PCA — {segs.length} segments identifiés sur {total.toLocaleString()} clients actifs</div>
+        <div className="ph-sub">{segs.length} segments identifiés sur {total.toLocaleString()} clients actifs</div>
       </div>
       <div className="chart-grid cols-2" style={{marginBottom:24}}>
         <div className="chart-card">
@@ -945,7 +1037,7 @@ function Segmentation() {
                 <div className="seg-stats">
                   {[
                     {label:"CA Moyen",   val:fmtTND(s.ca_moyen),              color:s.color},
-                    {label:"Bonus-Malus",val:(s.bm_moyen||0).toFixed(1),      color:riskColor},
+                    {label:"Bonus-Malus",val:Math.round(s.bm_moyen||0),       color:riskColor},
                     {label:"Contrats/cl",val:(s.nb_contrats_moyen||0).toFixed(1), color:"var(--info)"},
                   ].map(({label,val,color})=>(
                     <div key={label} className="seg-stat-box">
@@ -985,14 +1077,26 @@ function SinistresRisque() {
   const [riskData,setRiskData]=useState(null);
   const [anomalies,setAnomalies]=useState(null);
   const [accidentsFc,setAccidentsFc]=useState([]);
+  // Seul /api/risk-clients accepte agence/region/branche parmi les 5 sources
+  // de cette page (sinistres-stats, compare-agencies, anomalies et
+  // accidents-forecast sont tous des agregats globaux, non filtrables cote
+  // backend) -- filtre scope a cette seule carte plutot qu'une barre globale
+  // qui donnerait l'impression, a tort, que toute la page reagit au filtre.
+  const [riskFilterOpts,setRiskFilterOpts]=useState({agences:[],regions:[],branches:[]});
+  const [riskFVals,setRiskFVals]=useState({agence:"all",region:"all",branche:"all",mois:0});
 
   useEffect(()=>{
     apiFetch(`${API}/sinistres-stats`).then(r=>r.json()).then(setStats).catch(()=>{});
     apiFetch(`${API}/compare-agencies`).then(r=>r.json()).then(setAgences).catch(()=>{});
-    apiFetch(`${API}/risk-clients?n=15`).then(r=>r.json()).then(setRiskData).catch(()=>{});
     apiFetch(`${API}/anomalies`).then(r=>r.json()).then(setAnomalies).catch(()=>{});
     apiFetch(`${API}/accidents-forecast`).then(r=>r.json()).then(setAccidentsFc).catch(()=>{});
+    apiFetch(`${API}/filters`).then(r=>r.json()).then(setRiskFilterOpts).catch(()=>{});
   },[]);
+
+  useEffect(()=>{
+    const qs=new URLSearchParams({n:15,agence:riskFVals.agence,region:riskFVals.region,branche:riskFVals.branche}).toString();
+    apiFetch(`${API}/risk-clients?${qs}`).then(r=>r.json()).then(setRiskData).catch(()=>{});
+  },[riskFVals.agence,riskFVals.region,riskFVals.branche]);
 
   const topAgences = [...agences].sort((a,b)=>b.ratio_sp_pct-a.ratio_sp_pct).slice(0,10);
 
@@ -1000,8 +1104,7 @@ function SinistresRisque() {
     {label:"Sinistres enregistrés", val:(stats.total_sinistres||0).toLocaleString()},
     {label:"Montant total réglé",   val:fmtTND(stats.montant_total)},
     {label:"Montant moyen / sinistre", val:fmtTND(stats.montant_moyen)},
-    {label:"En cours de traitement", val:(stats.en_cours||0).toLocaleString()},
-    {label:"Mois le plus chargé",   val:MOIS_ABBR[(stats.pic_mois||1)-1]||"—"},
+    {label:"Mois le plus chargé",   val:MOIS_ABBR_TO_FULL[MOIS_ABBR[(stats.pic_mois||1)-1]]||"—"},
   ] : [];
 
   return (
@@ -1011,7 +1114,7 @@ function SinistresRisque() {
         <div className="ph-sub">Analyse des sinistres, comparaison agences et détection de clients à risque</div>
       </div>
 
-      <div className="kpi-grid" style={{gridTemplateColumns:"repeat(5,1fr)",marginBottom:24}}>
+      <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4,1fr)",marginBottom:24}}>
         {kpis.map((k,i)=>(
           <div key={i} className="kpi">
             <div className="kpi-label">{k.label}</div>
@@ -1065,6 +1168,11 @@ function SinistresRisque() {
           <div className="chart-title">Clients à Risque par Agence</div>
           <div className="chart-sub">
             {riskData ? `${riskData.total_clients_a_risque} client(s) à risque sur ${riskData.nb_clients_analyses} analysés (ratio S/P > ${riskData.seuil_ratio_sp_pct}%)` : "Chargement..."}
+          </div>
+          <div style={{marginTop:8}}>
+            <Filters filters={riskFilterOpts} values={riskFVals} hideMois compact
+              onChange={(k,v)=>setRiskFVals(p=>({...p,[k]:v}))}
+              onReset={()=>setRiskFVals({agence:"all",region:"all",branche:"all",mois:0})}/>
           </div>
           <div style={{height:260}}>
             <ResponsiveContainer width="100%" height="100%">
@@ -1138,12 +1246,10 @@ function Agent({ conversations, activeConvId, onNewChat, onSelectConv, onDeleteC
         body:JSON.stringify({message:text,history:apiHistory})});
       const data=await res.json();
       let answer=data.answer||"";
-      const isRL=answer.includes("rate_limit")||answer.includes("429")||answer.includes("Rate limit");
-      if(isRL) answer="**Le modèle local n'a pas pu répondre.**\n\nIl est peut-être occupé ou en cours de rechargement en mémoire. Veuillez patienter quelques secondes avant de réessayer.";
       const newH=[...apiHistory,{role:"user",content:text},{role:"assistant",content:answer}];
       const addM=[];
       if(data.tool_calls?.length>0) addM.push({type:"tools_used",tools:[...new Set(data.tool_calls.map(t=>t.tool))]});
-      addM.push({type:isRL?"error":"ai",text:answer});
+      addM.push({type:"ai",text:answer});
       onUpdateConv(convId,[...updatedMsgs,...addM],newH);
     }catch(e){
       onUpdateConv(convId,[...updatedMsgs,{type:"error",text:"Erreur de connexion. Vérifiez que FastAPI tourne sur le port 8000."}],apiHistory);
@@ -1186,11 +1292,23 @@ function Agent({ conversations, activeConvId, onNewChat, onSelectConv, onDeleteC
                 const reportMatch = m.text.match(/https?:\/\/\S+\/api\/reports\/[^\s)]+\.(pdf|xlsx)/i);
                 const reportUrl = reportMatch ? reportMatch[0] : null;
                 const cleanText = reportUrl
-                  ? m.text.replace(reportUrl, "").replace(/Rapport généré\s*:?\s*$/im, "").trim()
+                  // Le modele tente parfois d'ecrire lui-meme un lien markdown
+                  // autour de l'URL (ex: "[cliquez ici](URL)") malgre la
+                  // consigne de ne pas le faire -- une fois l'URL brute
+                  // retiree, les crochets/parentheses vides restants
+                  // s'affichaient tels quels ("[)"), d'ou ce nettoyage
+                  // defensif des residus de lien markdown en plus du texte
+                  // "Rapport genere :" ajoute par le backend en filet de
+                  // securite si le modele omet l'URL.
+                  ? m.text.replace(reportUrl, "")
+                          .replace(/\[[^\]]*\]\(\s*\)/g, "")
+                          .replace(/[[(]\s*[)\]]/g, "")
+                          .replace(/Rapport généré\s*:?\s*$/im, "")
+                          .trim()
                   : m.text;
                 return (
                   <div key={i}>
-                    <div className="msg-ai" dangerouslySetInnerHTML={{__html:cleanText.replace(/\n/g,"<br/>").replace(/\*\*(.*?)\*\*/g,"<strong style='color:var(--accent2)'>$1</strong>").replace(/^###\s(.+)/gm,"<strong style='color:var(--accent);font-size:14px'>$1</strong>")}}/>
+                    <div className="msg-ai" dangerouslySetInnerHTML={{__html:renderMarkdownTables(cleanText).replace(/\n/g,"<br/>").replace(/\*\*(.*?)\*\*/g,"<strong style='color:var(--accent2)'>$1</strong>").replace(/^###\s(.+)/gm,"<strong style='color:var(--accent);font-size:14px'>$1</strong>")}}/>
                     {reportUrl && (
                       <div style={{display:"flex",gap:8,marginTop:8}}>
                         <a href={withAuthParam(`${reportUrl}?inline=true`)} target="_blank" rel="noopener noreferrer" className="report-btn">Visualiser</a>
@@ -1221,7 +1339,7 @@ function Agent({ conversations, activeConvId, onNewChat, onSelectConv, onDeleteC
           <div className="side-card">
             <div className="side-title">Session active</div>
             <div className="seg-stat"><span className="seg-stat-k">Messages</span><span className="seg-stat-v" style={{color:"var(--accent)"}}>{msgs.length}</span></div>
-            <div className="seg-stat"><span className="seg-stat-k">Contexte</span><span className="seg-stat-v" style={{color:"var(--accent-light)"}}>{apiHistory.length} tours</span></div>
+            <div className="seg-stat"><span className="seg-stat-k">Contexte</span><span className="seg-stat-v" style={{color:"var(--accent-light)"}}>{Math.ceil(apiHistory.length/2)} tour{apiHistory.length>2?"s":""}</span></div>
             <div className="seg-stat"><span className="seg-stat-k">Conversations</span><span className="seg-stat-v" style={{color:"var(--muted)"}}>{conversations.length}</span></div>
           </div>
         </div>
@@ -1252,7 +1370,6 @@ function Monitoring() {
     {label:"Latence moyenne",          val:`${(perf.latence_moyenne_ms||0).toLocaleString()} ms`},
     {label:"Latence max",              val:`${(perf.latence_max_ms||0).toLocaleString()} ms`},
     {label:"Tokens moyens / requête",  val:(perf.tokens_moyens||0).toLocaleString()},
-    {label:"Taux d'erreur",            val:`${perf.taux_erreur_pct||0}%`},
     {label:"Appels avec outils",       val:`${perf.pct_avec_appels_outils||0}%`},
   ] : [];
 
@@ -1497,7 +1614,12 @@ function App() {
           <AdminPage/>
         ) : (
           <>
-            {page!=="agent"&&page!=="monitoring"&&page!=="sinistres"&&(
+            {/* Forecast et Segmentation retires (remarque utilisateur) : ni
+                /api/forecast ni /api/segments n'acceptent de parametres de
+                filtre (prevision et clustering calcules sur le portefeuille
+                entier) -- la barre s'affichait sans le moindre effet sur ces
+                deux pages. */}
+            {page!=="agent"&&page!=="monitoring"&&page!=="sinistres"&&page!=="forecast"&&page!=="segmentation"&&(
               <Filters filters={filters} values={fVals}
                 onChange={(k,v)=>setFVals(p=>({...p,[k]:v}))}
                 onReset={()=>setFVals({agence:"all",region:"all",branche:"all",mois:0})}/>
