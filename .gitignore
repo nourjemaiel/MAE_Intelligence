@@ -1,7 +1,14 @@
 venv/
 mlruns/
-outputs/
 plots/
+
+# outputs/ etait ici avant (regle generique "artefact genere, jamais du code
+# source") mais c'est FAUX pour ce dossier precis : segments_clients.csv,
+# previsions_*.csv etc. sont lus directement par mae_backend/main.py au
+# demarrage -- sans eux le backend retombe sur des constantes figees
+# perimees (_SEGMENTS_FALLBACK...) et, plus grave, le Dockerfile ne build
+# meme plus (COPY outputs/ outputs/ echoue sur un clone frais/CI, decouvert
+# en voulant publier une image sur GHCR). Reste versionne intentionnellement.
 .ipynb_checkpoints/
 __pycache__/
 *.pyc
