@@ -785,7 +785,56 @@ def seed_data():
 # clair, pour rester coherent avec le reste de l'app.
 SEGMENT_COLORS = ["#0b3d1f", "#156b32", "#1a7a3a", "#2ea84f", "#4cba6a", "#7fd99a", "#b5ead7"]
 
-def load_segments():
+_SEGMENT_COLOR_CACHE = None
+
+def _segment_color_map():
+    """
+    Couleur assignee par ordre ALPHABETIQUE des labels sur le fichier
+    COMPLET (non filtre), et mise en cache -- sans ca, appliquer un filtre
+    agence/region/branche change l'ordre par ca_moyen decroissant utilise
+    plus bas, donc un meme segment changerait de couleur d'un appel a
+    l'autre (ex: filtrer sur une agence ferait passer "Client a Risque" du
+    vert fonce au vert clair), ce qui casserait toute coherence visuelle
+    avec le reste de la page (cartes de profil, PCA du Chapitre 5...).
+    """
+    global _SEGMENT_COLOR_CACHE
+    if _SEGMENT_COLOR_CACHE is None:
+        path = "../outputs/segments_clients.csv"
+        try:
+            labels = sorted(pd.read_csv(path, usecols=["Segment_Label"])["Segment_Label"].unique())
+            _SEGMENT_COLOR_CACHE = {lbl: SEGMENT_COLORS[i % len(SEGMENT_COLORS)] for i, lbl in enumerate(labels)}
+        except Exception:
+            _SEGMENT_COLOR_CACHE = {}
+    return _SEGMENT_COLOR_CACHE
+
+_CLIENT_DOMINANT_DIMS_CACHE = None
+
+def _client_dominant_dims():
+    """
+    segments_clients.csv (sortie de 05_clustering.py) est agrege au niveau
+    CLIENT et n'a ni AGENCE ni BRANCHE -- un client peut avoir plusieurs
+    contrats, potentiellement dans des agences/branches differentes. Pour
+    permettre de filtrer la segmentation comme le reste de la plateforme,
+    chaque client se voit assigner l'agence et la branche de SON contrat a
+    la plus grosse prime (meme logique que _agence_to_region_map() : deriver
+    une dimension manquante depuis Production plutot que l'inventer).
+    """
+    global _CLIENT_DOMINANT_DIMS_CACHE
+    if _CLIENT_DOMINANT_DIMS_CACHE is None:
+        prod, _ = get_full_df()
+        if {"N_CLIENT", "AGENCE", "PRIME_NETTE"}.issubset(prod.columns):
+            idx = prod.groupby("N_CLIENT")["PRIME_NETTE"].idxmax()
+            dominant = prod.loc[idx].set_index("N_CLIENT")
+            _CLIENT_DOMINANT_DIMS_CACHE = {
+                "agence":  dominant["AGENCE"].to_dict(),
+                "branche": dominant["BRANCHE"].to_dict() if "BRANCHE" in dominant.columns else {},
+            }
+        else:
+            _CLIENT_DOMINANT_DIMS_CACHE = {"agence": {}, "branche": {}}
+    return _CLIENT_DOMINANT_DIMS_CACHE
+
+
+def load_segments(agence=None, region=None, branche=None):
     """
     Lit outputs/segments_clients.csv (sortie reelle de 05_clustering.py) et
     agrege un resume par segment -- remplace deux anciens tableaux figes a
@@ -800,6 +849,18 @@ def load_segments():
         return []
     try:
         df = pd.read_csv(path)
+        if agence and agence != "all" or region and region != "all" or branche and branche != "all":
+            dom = _client_dominant_dims()
+            client_agence = df["N_CLIENT"].map(dom["agence"])
+            if agence and agence != "all":
+                df = df[client_agence == normalize_agence(agence)]
+                client_agence = client_agence[df.index]
+            if region and region != "all":
+                region_map = _agence_to_region_map()
+                df = df[client_agence.map(region_map) == region]
+            if branche and branche != "all":
+                client_branche = df["N_CLIENT"].map(dom["branche"])
+                df = df[client_branche == branche]
         # Ratio sinistres/primes AGREGE par segment (somme/somme, pas une
         # moyenne de ratios individuels) -- meme methode que le ratio S/P
         # global du portefeuille et que le nommage "Client a Risque" dans
@@ -837,7 +898,7 @@ def load_segments():
             "nb_contrats_moyen": round(row['nb_contrats_moyen'], 2),
             "ratio_sp_pct":      round(row['ratio_sp_pct'], 1),
             "risque":            row['risque'],
-            "color":             SEGMENT_COLORS[i % len(SEGMENT_COLORS)],
+            "color":             _segment_color_map().get(row['Segment_Label'], SEGMENT_COLORS[i % len(SEGMENT_COLORS)]),
             "description":       f"{row['nb_contrats_moyen']:.1f} contrats/client en moyenne, "
                                    f"ratio sinistres/primes {row['ratio_sp_pct']:.1f}%",
         } for i, row in g.iterrows()]
@@ -1085,6 +1146,31 @@ def compute_data_drift():
         return {"error": str(e)}
 
 
+_AGENCE_TO_REGION_CACHE = None
+
+def _agence_to_region_map():
+    """
+    Sinistres n'a pas sa propre colonne Region (seul Production en a une,
+    voir Chapitre 3 du rapport). BUG CORRIGE : un filtre par region sur
+    Sinistres etait donc un no-op silencieux (la condition "Region" in
+    df.columns echouait), si bien qu'un ratio sinistres/primes "regional"
+    divisait un CA correctement filtre par un total de sinistres NON filtre
+    (portefeuille entier) -- observe concretement via un rapport genere pour
+    Nabeul affichant un ratio de sinistralite de 941% au lieu d'une valeur
+    plausible. Cache construit une fois depuis prod_full_df (memes agence
+    <-> region que Production, la seule source fiable) et reutilise pour
+    deriver la region de chaque ligne de Sinistres via son AGENCE.
+    """
+    global _AGENCE_TO_REGION_CACHE
+    if _AGENCE_TO_REGION_CACHE is None:
+        prod = state.get("prod_full_df", pd.DataFrame())
+        if "AGENCE" in prod.columns and "Region" in prod.columns:
+            _AGENCE_TO_REGION_CACHE = prod.drop_duplicates("AGENCE").set_index("AGENCE")["Region"].to_dict()
+        else:
+            _AGENCE_TO_REGION_CACHE = {}
+    return _AGENCE_TO_REGION_CACHE
+
+
 def apply_filters(df, agence=None, region=None, branche=None, mois=None):
     # normalize_agence() fait une correspondance exacte puis par prefixe (ex:
     # "Sousse" -> "Sousse 1") -- sans cet appel, un nom d'agence partiel/
@@ -1093,7 +1179,12 @@ def apply_filters(df, agence=None, region=None, branche=None, mois=None):
     # souvent "Ville N") et renvoyait silencieusement un resultat a zero
     # au lieu d'une erreur ou d'un vrai match.
     if agence  and agence  != "all" and "AGENCE"  in df.columns: df = df[df["AGENCE"]  == normalize_agence(agence)]
-    if region  and region  != "all" and "Region"  in df.columns: df = df[df["Region"]  == region]
+    if region  and region  != "all":
+        if "Region" in df.columns:
+            df = df[df["Region"] == region]
+        elif "AGENCE" in df.columns:
+            region_map = _agence_to_region_map()
+            df = df[df["AGENCE"].map(region_map) == region]
     if branche and branche != "all" and "BRANCHE" in df.columns: df = df[df["BRANCHE"] == branche]
     if mois    and mois    != 0     and "MOIS"    in df.columns: df = df[df["MOIS"]    == mois]
     return df
@@ -1502,11 +1593,12 @@ def tool_risk_clients(n=20, agence=None, region=None, branche=None):
     }
 
 
-def tool_sinistres_stats():
+def tool_sinistres_stats(agence=None, region=None, branche=None, mois=None):
     # get_full_df() (portefeuille complet + delta live, voir get_full_df()) --
     # montant_total/montant_moyen/total_sinistres viennent tous du meme
     # dataframe pour rester coherents entre eux au fil du temps.
     _, sin = get_full_df()
+    sin = apply_filters(sin, agence, region, branche, mois)
     return {
         "total_sinistres": len(sin),
         "montant_total":   round(sin["REGLEMENTS"].sum(), 2) if "REGLEMENTS" in sin.columns else 0,
@@ -1524,7 +1616,7 @@ def tool_branch_analysis():
             for b, v in by_br.items()]
 
 
-def tool_compare_agencies():
+def tool_compare_agencies(agence=None, region=None, branche=None, mois=None):
     # Portefeuille COMPLET (get_full_df), pas l'echantillon live
     # state["contrats"]/["sinistres"] : le simulateur pioche ses
     # contrats/sinistres synthetiques dans une liste
@@ -1535,7 +1627,13 @@ def tool_compare_agencies():
     # de plusieurs milliers de % qui n'existe pas dans les vraies donnees
     # (verifie : "Gafsa"/"Tozeur" n'apparaissent dans AUCUN des deux fichiers
     # Cleaned.csv reels -- seulement 10 agences y existent).
+    # region/branche restent utiles ici (comparent un sous-ensemble d'agences
+    # entre elles) ; un filtre agence precis reduit le graphique a une seule
+    # barre, comme pour "Top 10 Agences par CA" sur le tableau de bord --
+    # comportement identique, pas un bug.
     prod, sin = get_full_df()
+    prod = apply_filters(prod, agence, region, branche, mois)
+    sin  = apply_filters(sin,  agence, region, branche, mois)
     result = []
     for ag in prod["AGENCE"].unique():
         p  = prod[prod["AGENCE"] == ag]
@@ -1558,7 +1656,7 @@ def tool_compare_agencies():
     return sorted(result, key=lambda x: x["ca"], reverse=True)
 
 
-def tool_detect_anomalies():
+def tool_detect_anomalies(agence=None, region=None, branche=None, mois=None):
     # Portefeuille COMPLET (get_full_df), pas l'echantillon live
     # state["contrats"]/["sinistres"] -- meme raison que
     # tool_compare_agencies()/tool_risk_clients() : sur
@@ -1566,6 +1664,8 @@ def tool_detect_anomalies():
     # denominateurs quasi nuls produisaient des ratios moyens a 5 chiffres
     # (ex. 11 634% observe) sans rapport avec le portefeuille reel.
     prod, sin = get_full_df()
+    prod = apply_filters(prod, agence, region, branche, mois)
+    sin  = apply_filters(sin,  agence, region, branche, mois)
     anomalies = []
     if "REGLEMENTS" in sin.columns and len(sin) > 10:
         mean_s   = sin["REGLEMENTS"].mean()
@@ -1593,7 +1693,7 @@ def tool_detect_anomalies():
             "count":       len(haut),
             "ratio_moyen": round(haut["ratio"].mean(), 1) if len(haut) > 0 else 0,
         })
-    by_ag    = tool_compare_agencies()
+    by_ag    = tool_compare_agencies(agence, region, branche, mois)
     ag_alert = [a for a in by_ag if a["ratio_sp_pct"] > 80]
     anomalies.append({
         "type":    "Agences sinistralite > 80%",
@@ -2154,10 +2254,21 @@ def generate_report_endpoint(format: str = "pdf"):
 
 
 @app.get("/api/segments")
-def segments_endpoint():
+def segments_endpoint(agence: str = "all", region: str = "all", branche: str = "all"):
     # Meme source que tool_segments() (agent) -- voir load_segments(). Seul
     # "nb_clients" est renomme "count" ici, cle attendue par le dashboard.
-    return [{**s, "count": s["nb_clients"]} for s in tool_segments()]
+    # Filtre uniquement si demande (evite de relire le CSV a chaque appel
+    # non filtre : tool_segments() sert alors le resume mis en cache au
+    # demarrage, comme avant).
+    if agence != "all" or region != "all" or branche != "all":
+        segs = load_segments(
+            agence  if agence  != "all" else None,
+            region  if region  != "all" else None,
+            branche if branche != "all" else None,
+        )
+    else:
+        segs = tool_segments()
+    return [{**s, "count": s["nb_clients"]} for s in segs]
 
 
 @app.get("/api/filters")
@@ -2204,8 +2315,13 @@ def live_feed(limit: int = 10):
 
 
 @app.get("/api/anomalies")
-def anomalies_endpoint():
-    return tool_detect_anomalies()
+def anomalies_endpoint(agence: str = "all", region: str = "all", branche: str = "all", mois: int = 0):
+    return tool_detect_anomalies(
+        agence  if agence  != "all" else None,
+        region  if region  != "all" else None,
+        branche if branche != "all" else None,
+        mois    if mois    != 0     else None,
+    )
 
 
 @app.get("/api/risk-clients")
@@ -2219,13 +2335,23 @@ def risk_clients_endpoint(n: int = 20, agence: str = "all", region: str = "all",
 
 
 @app.get("/api/compare-agencies")
-def compare_agencies_endpoint():
-    return tool_compare_agencies()
+def compare_agencies_endpoint(agence: str = "all", region: str = "all", branche: str = "all", mois: int = 0):
+    return tool_compare_agencies(
+        agence  if agence  != "all" else None,
+        region  if region  != "all" else None,
+        branche if branche != "all" else None,
+        mois    if mois    != 0     else None,
+    )
 
 
 @app.get("/api/sinistres-stats")
-def sinistres_stats_endpoint():
-    return tool_sinistres_stats()
+def sinistres_stats_endpoint(agence: str = "all", region: str = "all", branche: str = "all", mois: int = 0):
+    return tool_sinistres_stats(
+        agence  if agence  != "all" else None,
+        region  if region  != "all" else None,
+        branche if branche != "all" else None,
+        mois    if mois    != 0     else None,
+    )
 
 
 class ChatRequest(BaseModel):

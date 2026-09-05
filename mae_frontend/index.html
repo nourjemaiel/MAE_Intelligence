@@ -942,9 +942,10 @@ function Forecast() {
 // ═══════════════════════════════════════════════════════════════
 // SEGMENTATION
 // ═══════════════════════════════════════════════════════════════
-function Segmentation() {
+function Segmentation({filterVals}) {
   const [segs,setSegs]=useState([]);
-  useEffect(()=>{apiFetch(`${API}/segments`).then(r=>r.json()).then(setSegs).catch(()=>{});},[]);
+  const qs=new URLSearchParams({agence:filterVals.agence,region:filterVals.region,branche:filterVals.branche}).toString();
+  useEffect(()=>{apiFetch(`${API}/segments?${qs}`).then(r=>r.json()).then(setSegs).catch(()=>{});},[qs]);
   const total=segs.reduce((s,r)=>s+r.count,0);
 
   // Cle recherchee en sous-chaine (pas egalite stricte) : les noms reels
@@ -1078,32 +1079,33 @@ function Segmentation() {
 // ═══════════════════════════════════════════════════════════════
 const MOIS_ABBR=["Jan","Fev","Mar","Avr","Mai","Jun","Jul","Aou","Sep","Oct","Nov","Dec"];
 
-function SinistresRisque() {
+function SinistresRisque({filterVals}) {
   const [stats,setStats]=useState(null);
   const [agences,setAgences]=useState([]);
   const [riskData,setRiskData]=useState(null);
   const [anomalies,setAnomalies]=useState(null);
   const [accidentsFc,setAccidentsFc]=useState([]);
-  // Seul /api/risk-clients accepte agence/region/branche parmi les 5 sources
-  // de cette page (sinistres-stats, compare-agencies, anomalies et
-  // accidents-forecast sont tous des agregats globaux, non filtrables cote
-  // backend) -- filtre scope a cette seule carte plutot qu'une barre globale
-  // qui donnerait l'impression, a tort, que toute la page reagit au filtre.
-  const [riskFilterOpts,setRiskFilterOpts]=useState({agences:[],regions:[],branches:[]});
-  const [riskFVals,setRiskFVals]=useState({agence:"all",region:"all",branche:"all",mois:0});
+
+  // accidents-forecast reste hors filtre : c'est la sortie figee d'un
+  // modele de Poisson entraine une fois sur le portefeuille entier (voir
+  // Chapitre 4 du rapport), pas un agregat recalculable a la volee comme
+  // les 4 autres cartes de cette page.
+  const qs=new URLSearchParams({agence:filterVals.agence,region:filterVals.region,branche:filterVals.branche,mois:filterVals.mois}).toString();
 
   useEffect(()=>{
-    apiFetch(`${API}/sinistres-stats`).then(r=>r.json()).then(setStats).catch(()=>{});
-    apiFetch(`${API}/compare-agencies`).then(r=>r.json()).then(setAgences).catch(()=>{});
-    apiFetch(`${API}/anomalies`).then(r=>r.json()).then(setAnomalies).catch(()=>{});
+    apiFetch(`${API}/sinistres-stats?${qs}`).then(r=>r.json()).then(setStats).catch(()=>{});
+    apiFetch(`${API}/compare-agencies?${qs}`).then(r=>r.json()).then(setAgences).catch(()=>{});
+    apiFetch(`${API}/anomalies?${qs}`).then(r=>r.json()).then(setAnomalies).catch(()=>{});
+  },[qs]);
+
+  useEffect(()=>{
     apiFetch(`${API}/accidents-forecast`).then(r=>r.json()).then(setAccidentsFc).catch(()=>{});
-    apiFetch(`${API}/filters`).then(r=>r.json()).then(setRiskFilterOpts).catch(()=>{});
   },[]);
 
   useEffect(()=>{
-    const qs=new URLSearchParams({n:15,agence:riskFVals.agence,region:riskFVals.region,branche:riskFVals.branche}).toString();
-    apiFetch(`${API}/risk-clients?${qs}`).then(r=>r.json()).then(setRiskData).catch(()=>{});
-  },[riskFVals.agence,riskFVals.region,riskFVals.branche]);
+    const rqs=new URLSearchParams({n:15,agence:filterVals.agence,region:filterVals.region,branche:filterVals.branche}).toString();
+    apiFetch(`${API}/risk-clients?${rqs}`).then(r=>r.json()).then(setRiskData).catch(()=>{});
+  },[filterVals.agence,filterVals.region,filterVals.branche]);
 
   const topAgences = [...agences].sort((a,b)=>b.ratio_sp_pct-a.ratio_sp_pct).slice(0,10);
 
@@ -1176,11 +1178,6 @@ function SinistresRisque() {
           <div className="chart-sub">
             {riskData ? `${riskData.total_clients_a_risque} client(s) à risque sur ${riskData.nb_clients_analyses} analysés (ratio S/P > ${riskData.seuil_ratio_sp_pct}%)` : "Chargement..."}
           </div>
-          <div style={{marginTop:8}}>
-            <Filters filters={riskFilterOpts} values={riskFVals} hideMois compact
-              onChange={(k,v)=>setRiskFVals(p=>({...p,[k]:v}))}
-              onReset={()=>setRiskFVals({agence:"all",region:"all",branche:"all",mois:0})}/>
-          </div>
           <div style={{height:260}}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={riskData?.par_agence||[]} layout="vertical" margin={{left:10,right:30,top:10,bottom:0}}>
@@ -1197,6 +1194,7 @@ function SinistresRisque() {
           <div className="chart-title">Nombre d'Accidents Prévu par Mois</div>
           <div className="chart-sub">
             {accidentsFc.length>0 ? `${accidentsFc.reduce((s,r)=>s+r.accidents,0).toLocaleString()} accidents prévus sur les 12 prochains mois` : "Chargement..."}
+            {" — portefeuille entier, non affecté par les filtres ci-dessus"}
           </div>
           <div style={{height:260}}>
             <ResponsiveContainer width="100%" height="100%">
@@ -1718,20 +1716,22 @@ function App() {
           <AdminPage/>
         ) : (
           <>
-            {/* Forecast et Segmentation retires (remarque utilisateur) : ni
-                /api/forecast ni /api/segments n'acceptent de parametres de
-                filtre (prevision et clustering calcules sur le portefeuille
-                entier) -- la barre s'affichait sans le moindre effet sur ces
-                deux pages. */}
-            {page!=="agent"&&page!=="monitoring"&&page!=="sinistres"&&page!=="forecast"&&page!=="segmentation"&&(
-              <Filters filters={filters} values={fVals}
+            {/* Forecast retiree (remarque utilisateur) : /api/forecast
+                n'accepte pas de parametres de filtre (prevision calculee
+                sur le portefeuille entier) -- la barre s'affichait sans le
+                moindre effet sur cette page. Sinistres et Segmentation, a
+                l'inverse, l'affichent de nouveau depuis que leurs endpoints
+                (sinistres-stats, compare-agencies, anomalies, segments)
+                acceptent chacun agence/region/branche. */}
+            {page!=="agent"&&page!=="monitoring"&&page!=="forecast"&&(
+              <Filters filters={filters} values={fVals} hideMois={page==="segmentation"}
                 onChange={(k,v)=>setFVals(p=>({...p,[k]:v}))}
                 onReset={()=>setFVals({agence:"all",region:"all",branche:"all",mois:0})}/>
             )}
             {page==="dashboard"    && <Dashboard filterVals={fVals} onFiltersLoaded={handleFiltersLoaded}/>}
             {page==="forecast"     && <Forecast/>}
-            {page==="segmentation" && <Segmentation/>}
-            {page==="sinistres"    && <SinistresRisque/>}
+            {page==="segmentation" && <Segmentation filterVals={fVals}/>}
+            {page==="sinistres"    && <SinistresRisque filterVals={fVals}/>}
             {page==="monitoring"   && <Monitoring/>}
             {page==="agent"        && <Agent conversations={conversations} activeConvId={activeConvId}
                 onNewChat={handleNewChat} onSelectConv={id=>{setActiveConvId(id);setPage("agent");}}
